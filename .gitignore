@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime cache, browser state and logs
+gf_cache.json
+gf_chrome_profile/
+gf_cdp_profile/
+gf_debug.txt
+*.log
+
+# Local inputs / generated outputs
+持仓输入.xlsx
+估值表输出.xlsx
+~$*.xlsx

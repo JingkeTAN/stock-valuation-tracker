@@ -3,7 +3,7 @@
 估值表生成器：从「输入 xlsx」批量生成完整计算页 + 总览 + 辅助页
 输入文件：每个 sheet 只需三列 —— 名称 / 代码 / 净值权重
 输出：同名多 sheet 的完整计算表 + 总览对比 + 网页更新来源 + 口径说明 + 当一家公司历史总账
-合并模式：更新=只重生计算页（不动总览）；添加=新建页+总览追加列
+合并模式：更新=只重生计算页（同步汇总引用）；添加=新建页+总览追加列
 进标志优先读取 gf_ticker_map.csv
 兼容 Python 3.6+
 """
@@ -13,11 +13,14 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os
 import sys
+import re
+from pathlib import Path
+from openpyxl.formula.tokenizer import Tokenizer
 from datetime import datetime
 
 # ========== 配置区 ==========
 
-GF_MAP_PATH = "GF估值更新器/gf_ticker_map.csv"
+GF_MAP_PATH = str(Path(__file__).resolve().parent / "gf_ticker_map.csv")
 SUMMARY_START = 60
 
 BANK_INSURANCE_CODES = {
@@ -122,7 +125,7 @@ def row_formulas(n):
         "F": '=IF(OR(D{n}="",E{n}="",E{n}<=0,D{n}<=0),"",D{n}/E{n})'.format(n=n),
         "J": '=IF(OR(H{n}="",I{n}="",I{n}<=0,H{n}<=0),"",H{n}/I{n})'.format(n=n),
         "N": '=IF(OR(L{n}="",M{n}="",M{n}<=0,L{n}<=0),"",L{n}/M{n})'.format(n=n),
-        "R": '=IF(OR(P{n}="",Q{n}="",Q{n}<=0,P{n}<=0),"",P{n}/Q{n})'.format(n=n),
+        "R": '=IF(OR(P{n}="",Q{n}="",Q{n}<=0,P{n}=0),"",P{n}/Q{n})'.format(n=n),
         "U": '=IF(AND(ISNUMBER(D{n}),D{n}>0),1,0)'.format(n=n),
         "V": '=IF(AND(ISNUMBER(D{n}),ISNUMBER(H{n}),D{n}>0,H{n}>0),H{n}/D{n},"")'.format(n=n),
         "W": '=IF(AND(ISNUMBER(E{n}),ISNUMBER(I{n}),E{n}>0,I{n}>0),I{n}/E{n},"")'.format(n=n),
@@ -136,7 +139,7 @@ def row_formulas(n):
         "AE": '=IF(AND(G{n}=1,ISNUMBER(F{n}),F{n}>0),1/F{n},0)'.format(n=n),
         "AF": '=IF(AND(K{n}=1,ISNUMBER(J{n}),J{n}>0),1/J{n},0)'.format(n=n),
         "AG": '=IF(AND(O{n}=1,ISNUMBER(N{n}),N{n}>0),1/N{n},0)'.format(n=n),
-        "AH": '=IF(AND(S{n}=1,ISNUMBER(R{n}),R{n}>0),1/R{n},0)'.format(n=n),
+        "AH": '=IF(AND(S{n}=1,ISNUMBER(R{n}),R{n}<>0),1/R{n},0)'.format(n=n),
         "AI": '=IF(AND(G{n}=1,ISNUMBER(D{n}),D{n}>0),1/D{n},0)'.format(n=n),
         "AJ": '=IF(AND(G{n}=1,ISNUMBER(E{n}),E{n}>0),1/E{n},0)'.format(n=n),
         "AK": '=IF(AND(K{n}=1,ISNUMBER(H{n}),H{n}>0),1/H{n},0)'.format(n=n),
@@ -247,7 +250,7 @@ def generate_sheet(ws, holdings, title="估值表", preferred_summary_start=None
         (summary_start + 5, "调和 PE（进调和PE=1）", None,
          None, '=IFERROR(SUMPRODUCT({rng},U{s}:U{e})/SUMPRODUCT({rng},U{s}:U{e},1/(D{s}:D{e}+(D{s}:D{e}<=0))),"")'.format(rng=rng, s=s, e=e)),
         (summary_start + 6, "持仓加权调和 EV/FCF", None,
-         None, '=IFERROR(B{0}/SUMPRODUCT({rng},S{s}:S{e},1/(P{s}:P{e}+(P{s}:P{e}<=0))),"")'.format(summary_start + 3, rng=rng, s=s, e=e)),
+         None, '=IFERROR(B{0}/SUMPRODUCT({rng},S{s}:S{e},AO{s}:AO{e}),"")'.format(summary_start + 3, rng=rng, s=s, e=e)),
         (summary_start + 8, "调和PE覆盖净值%（利润>0）", "=SUMPRODUCT({rng},U{s}:U{e})".format(rng=rng, s=s, e=e),
          "调和PE（同D）", "=D{0}".format(summary_start + 5)),
         (summary_start + 9, "调和PB覆盖净值%（账面>0）", "=SUMPRODUCT({rng},Z{s}:Z{e})".format(rng=rng, s=s, e=e),
@@ -257,7 +260,7 @@ def generate_sheet(ws, holdings, title="估值表", preferred_summary_start=None
         (summary_start + 12, "几何 PE/Med", '=IF(B{0}=0,"",EXP(SUMPRODUCT({rng},AA{s}:AA{e})/B{0}))'.format(summary_start, rng=rng, s=s, e=e), None, None),
         (summary_start + 13, "几何 PB/Med", '=IF(B{0}=0,"",EXP(SUMPRODUCT({rng},AB{s}:AB{e})/B{0}))'.format(summary_start + 1, rng=rng, s=s, e=e), None, None),
         (summary_start + 14, "几何 PS/Med", '=IF(B{0}=0,"",EXP(SUMPRODUCT({rng},AC{s}:AC{e})/B{0}))'.format(summary_start + 2, rng=rng, s=s, e=e), None, None),
-        (summary_start + 15, "几何 EV/FCF/Med", '=IF(B{0}=0,"",EXP(SUMPRODUCT({rng},AD{s}:AD{e})/B{0}))'.format(summary_start + 3, rng=rng, s=s, e=e), None, None),
+        (summary_start + 15, "几何 EV/FCF/Med（仅正值）", '=IFERROR(EXP(SUMPRODUCT({rng},AD{s}:AD{e})/SUMPRODUCT({rng},S{s}:S{e},--(P{s}:P{e}>0),--(Q{s}:Q{e}>0))),"")'.format(rng=rng, s=s, e=e), None, None),
         (summary_start + 17, "持仓加权 ΔROE（ppt）", '=IFERROR(SUMPRODUCT({rng},Y{s}:Y{e},X{s}:X{e})/SUMPRODUCT({rng},Y{s}:Y{e}),"")'.format(rng=rng, s=s, e=e),
          "反推ROE现−中位。解释列，不是贵贱。", None),
         (summary_start + 18, "净资产加权反推ROE", '=IFERROR(SUMPRODUCT({rng},U{s}:U{e},Z{s}:Z{e},IF(ISNUMBER(V{s}:V{e}),V{s}:V{e},0),1/H{s}:H{e})/SUMPRODUCT({rng},U{s}:U{e},Z{s}:Z{e},1/H{s}:H{e}),"")'.format(rng=rng, s=s, e=e),
@@ -281,7 +284,7 @@ def generate_sheet(ws, holdings, title="估值表", preferred_summary_start=None
         (summary_start + 36, "调和：Σw/Σ(w/r)，等价于利润不变、各回中位时的市值回归比。"),
         (summary_start + 37, "当一家公司：Σ(w/中位)/Σ(w/现)，把组合当成一家公司看相对自身常态。"),
         (summary_start + 38, "银行/保险/券商默认不进 PS、EV（见 gf_ticker_map）。"),
-        (summary_start + 39, "负 PE / 负账面 / 无中位 的项自动不进对应指标。"),
+        (summary_start + 39, "负PE/负账面不进；EV允许负现值，中位须为正；几何EV仅用正值样本。"),
     ]
 
     for row, a, b, c, d in summaries:
@@ -298,7 +301,7 @@ def generate_sheet(ws, holdings, title="估值表", preferred_summary_start=None
         ws.cell(row, 1, text).font = Font(italic=True, color="666666")
 
     # 历史流水区（只建表头，数据行由更新器 snapshot_as_one_company 写入）
-    hist_start = 105
+    hist_start = max(105, summary_start + 43)
     ws.cell(hist_start, 1, "当一家公司历史").font = Font(bold=True)
     ws.cell(hist_start + 1, 1, "时间")
     ws.cell(hist_start + 1, 2, "组合PE/常态PE")
@@ -320,21 +323,21 @@ def generate_sheet(ws, holdings, title="估值表", preferred_summary_start=None
     chart.x_axis.numFmt = "MM-DD"
     chart.width = 18
     chart.height = 8
-    xvalues = Reference(ws, min_col=1, min_row=107, max_row=108)
+    xvalues = Reference(ws, min_col=1, min_row=hist_start + 2, max_row=hist_start + 3)
     titles = ["组合PE/常态PE", "组合PB/常态PB", "组合PS/常态PS", "组合EVFCF/常态EVFCF"]
     for col, title in enumerate(titles, 2):
-        yvalues = Reference(ws, min_col=col, min_row=106, max_row=108)
+        yvalues = Reference(ws, min_col=col, min_row=hist_start + 1, max_row=hist_start + 3)
         s = Series(yvalues, xvalues, title_from_data=True)
         s.title = SeriesLabel(v=title)
         chart.series.append(s)
-    ws.add_chart(chart, "A110")
+    ws.add_chart(chart, "A{}".format(hist_start + 5))
 
     widths = {"A": 16, "B": 10, "C": 12, "T": 30}
     for col in range(1, len(HEADERS) + 1):
         letter = get_column_letter(col)
         ws.column_dimensions[letter].width = widths.get(letter, 12)
     ws.freeze_panes = "A5"
-    return {"last_data_row": last_data, "summary_start": summary_start, "holdings_count": len(holdings)}
+    return {"last_data_row": last_data, "summary_start": summary_start, "holdings_count": len(holdings), "history_start": hist_start}
 
 # ========== 生成总览 ==========
 
@@ -369,7 +372,7 @@ def generate_overview(wb, sheet_infos):
         (19, "加权 PS / 十年中位", "D", 2),
         (20, "EV/FCF 覆盖净值%", "B", 3),
         (21, "加权 EV/FCF / 十年中位", "D", 3),
-        (22, "调和 EV/FCF（正FCF）", "D", 6),
+        (22, "调和 EV/FCF（含负值）", "D", 6),
         (23, "调和PE覆盖%（利润>0）", "B", 8),
         (24, "调和 PB", "D", 9),
         (25, "调和PB覆盖%（账面>0）", "B", 9),
@@ -378,7 +381,7 @@ def generate_overview(wb, sheet_infos):
         (28, "几何 PB/Med", "B", 13),
         (29, "持仓加权 ΔROE（ppt）", "B", 17),
         (30, "几何 PS/Med", "B", 14),
-        (31, "几何 EV/FCF/Med", "B", 15),
+        (31, "几何 EV/FCF/Med（仅正值）", "B", 15),
         (32, "调和 PE/Med（市值回归）", "B", 20),
         (33, "调和 PB/Med", "B", 21),
         (34, "调和 PS/Med", "B", 22),
@@ -392,7 +395,7 @@ def generate_overview(wb, sheet_infos):
     for row, label, col_letter, offset in metrics:
         ws.cell(row, 1, label).font = Font(bold=True)
         for i, (name, info) in enumerate(sheet_infos):
-            safe = "'{}'".format(name) if any(c in name for c in " -") else name
+            safe = "'{}'".format(name.replace("'", "''"))
             ss = info.get("summary_start", SUMMARY_START)
             ref_row = ss + offset
             ws.cell(row, i + 2, "={}!{}{}".format(safe, col_letter, ref_row))
@@ -408,7 +411,7 @@ def generate_overview(wb, sheet_infos):
 
     for i, (name, _) in enumerate(sheet_infos):
         row = chart_start + i
-        safe = "'{}'".format(name) if any(c in name for c in " -") else name
+        safe = "'{}'".format(name.replace("'", "''"))
         ws.cell(row, 1, name)
         col_letter = get_column_letter(i + 2)
         ws.cell(row, 2, "={}".format(col_letter + "45"))
@@ -465,7 +468,7 @@ def generate_methodology_sheet(wb):
         (6, "调和", "Σw / Σ(w / r)。等价于利润不变、各回中位时的市值回归比。"),
         (7, "当一家公司", "Σ(w / 中位) / Σ(w / 现)。把组合当成一家公司看相对自身常态。"),
         (8, "进标志", "银行/保险/券商默认不进 PS、EV（见 gf_ticker_map.csv 的 no_ps/no_ev）。"),
-        (9, "负值处理", "负 PE / 负账面 / 无中位 的项自动不进对应指标。"),
+        (9, "负值处理", "负PE/负账面不进；EV允许负现值，中位须为正；几何EV仅用正值样本。"),
         (10, "EV/FCF", "负 FCF 时 1/现为负，整包收益率被拉低；中位仍须 >0。"),
         (11, "覆盖率", "进入该指标的持仓权重之和。未进入的不参与加权/几何/调和。"),
         (12, "历史流水", "每次生成追加一行，公式链到汇总区。蓝字更新后历史自动刷新。"),
@@ -487,15 +490,16 @@ def generate_master_history(wb, sheet_infos):
         cell = ws.cell(4, col, h)
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="70AD47")
-    for i, (name, _) in enumerate(sheet_infos):
+    for i, (name, info) in enumerate(sheet_infos):
         row = 5 + i
-        safe = "'{}'".format(name) if any(c in name for c in " -") else name
+        first_history_row = info.get("history_start", 105) + 2
+        safe = "'{}'".format(name.replace("'", "''"))
         ws.cell(row, 1, name)
-        ws.cell(row, 2, "={0}!A107".format(safe))
-        ws.cell(row, 3, "={0}!B107".format(safe))
-        ws.cell(row, 4, "={0}!C107".format(safe))
-        ws.cell(row, 5, "={0}!D107".format(safe))
-        ws.cell(row, 6, "={0}!E107".format(safe))
+        ws.cell(row, 2, "={0}!A{1}".format(safe, first_history_row))
+        ws.cell(row, 3, "={0}!B{1}".format(safe, first_history_row))
+        ws.cell(row, 4, "={0}!C{1}".format(safe, first_history_row))
+        ws.cell(row, 5, "={0}!D{1}".format(safe, first_history_row))
+        ws.cell(row, 6, "={0}!E{1}".format(safe, first_history_row))
     for col in range(1, 7):
         ws.column_dimensions[get_column_letter(col)].width = 18
     ws.column_dimensions["A"].width = 22
@@ -589,7 +593,7 @@ def _read_blue_values(ws):
 
 def _find_summary_start(ws):
     """找旧页「PE 覆盖净值%」所在行，作为汇总区起点。"""
-    for r in range(20, min(ws.max_row + 1, 150)):
+    for r in range(20, ws.max_row + 1):
         a = ws.cell(r, 1).value
         if a and str(a).startswith("PE 覆盖"):
             return r
@@ -628,9 +632,36 @@ def _restore_blues(ws, blues):
     return restored
 
 
+def _shift_summary_refs(wb, sheet_name, old_start, new_start):
+    """只移动指向该页汇总区的公式引用，保留绝对引用及其他区域。"""
+    if old_start is None or old_start == new_start:
+        return
+    delta = new_start - old_start
+    for ws in wb:
+        if ws.title in (sheet_name, "当一家公司历史"):
+            continue
+        for row in ws:
+            for cell in row:
+                if cell.data_type != "f":
+                    continue
+                tokens = Tokenizer(cell.value).items
+                for token in tokens:
+                    if token.type != "OPERAND" or token.subtype != "RANGE" or "!" not in token.value:
+                        continue
+                    prefix, address = token.value.rsplit("!", 1)
+                    target = prefix[1:-1].replace("''", "'") if prefix.startswith("'") and prefix.endswith("'") else prefix
+                    if target != sheet_name:
+                        continue
+                    def move(match):
+                        r = int(match.group(2))
+                        return match.group(1) + str(r + delta if old_start <= r <= old_start + 39 else r)
+                    token.value = prefix + "!" + re.sub(r"(\$?[A-Za-z]{1,3}\$?)([0-9]+)", move, address)
+                cell.value = "=" + "".join(t.value for t in tokens)
+
+
 def merge_into_main(input_path, main_path, sheet_names=None):
     """把输入里的持仓合并进主文件。
-    - 更新（主文件已有同名计算页）：只重生该计算页（公式范围对齐、补合计净值%、保留蓝字和汇总区位置）。总览对比、排名表、历史总账一律不动。
+    - 更新（主文件已有同名计算页）：只重生该计算页（公式范围对齐、补合计净值%、保留蓝字和汇总区位置）。汇总区移动时同步引用；排名布局和历史总账保留。
     - 添加（主文件没有该页）：新建计算页，并在总览追加列、排名表插入行、历史总账追加。
     """
     if not os.path.exists(main_path):
@@ -668,17 +699,19 @@ def merge_into_main(input_path, main_path, sheet_names=None):
             restored = _restore_blues(tmp_ws, blues)
 
             # 替换主文件里的页
+            sheet_index = main.sheetnames.index(out_name)
             del main[out_name]
-            dest = main.create_sheet(out_name)
+            dest = main.create_sheet(out_name, sheet_index)
             _copy_sheet_content(tmp_ws, dest)
 
+            _shift_summary_refs(main, out_name, old_summary, info["summary_start"])
             note = ""
             if old_summary and info["summary_start"] != old_summary:
-                note = "（汇总区从第{}行移到第{}行，总览引用可能需手工对齐）".format(
+                note = "（汇总区从第{}行移到第{}行，关联汇总引用已同步更新）".format(
                     old_summary, info["summary_start"])
             print("已更新计算页: {} 持仓{}只 蓝字回写{}只{}".format(
                 out_name, info["holdings_count"], restored, note))
-            print("  → 总览对比 / 排名表 / 历史总账未改动")
+            print("  → 已同步汇总引用；排名布局和历史总账保留")
             updated += 1
         else:
             # ========== 添加模式：新建页 + 动总览 ==========
@@ -701,7 +734,7 @@ def merge_into_main(input_path, main_path, sheet_names=None):
             next_col = last_col + 1
             overview.cell(4, next_col, out_name)
             ss = info.get("summary_start", SUMMARY_START)
-            safe = "'{}'".format(out_name) if any(c in out_name for c in " -") else out_name
+            safe = "'{}'".format(out_name.replace("'", "''"))
             metrics = [
                 (13, "B", 0), (14, "D", 0), (15, "D", 5),
                 (16, "B", 1), (17, "D", 1), (18, "B", 2), (19, "D", 2),
@@ -746,11 +779,11 @@ def merge_into_main(input_path, main_path, sheet_names=None):
                 while hist.cell(hist_row, 1).value:
                     hist_row += 1
                 hist.cell(hist_row, 1, out_name)
-                hist.cell(hist_row, 2, "={}!A107".format(safe))
-                hist.cell(hist_row, 3, "={}!B107".format(safe))
-                hist.cell(hist_row, 4, "={}!C107".format(safe))
-                hist.cell(hist_row, 5, "={}!D107".format(safe))
-                hist.cell(hist_row, 6, "={}!E107".format(safe))
+                hist.cell(hist_row, 2, "={}!A{}".format(safe, info["history_start"] + 2))
+                hist.cell(hist_row, 3, "={}!B{}".format(safe, info["history_start"] + 2))
+                hist.cell(hist_row, 4, "={}!C{}".format(safe, info["history_start"] + 2))
+                hist.cell(hist_row, 5, "={}!D{}".format(safe, info["history_start"] + 2))
+                hist.cell(hist_row, 6, "={}!E{}".format(safe, info["history_start"] + 2))
 
             print("已添加新页: {} 持仓{}只，并在总览第{}列追加".format(
                 out_name, info["holdings_count"], next_col))
@@ -831,7 +864,7 @@ def interactive_run():
     generate_from_input(input_path, output_path)
 
     print()
-    print("合并规则：主文件已有同名计算页 → 只更新该页（公式对齐、补合计、保留蓝字），总览不动；")
+    print("合并规则：主文件已有同名计算页 → 只更新该页（公式对齐、补合计、保留蓝字），汇总引用同步；")
     print("          主文件没有该页 → 新建计算页，并在总览追加列。")
     merge = input("是否直接合并进主文件「权益QDII_ETF_估值相对十年中位.xlsx」？(y/N): ").strip().lower()
     if merge in ("y", "yes", "是"):
@@ -852,3 +885,4 @@ if __name__ == "__main__":
     else:
         # 无参数：进入交互模式
         interactive_run()
+

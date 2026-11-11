@@ -1,147 +1,48 @@
-GuruFocus 估值自动更新器
-========================
+股票自动化：QDII / ETF 持仓估值跟踪
+========================================
+完整说明见同目录 README.md。
 
-做什么
-  打开 GuruFocus 公开 term 页（和你在浏览器里看到的 Min/Med/Max/Current 同一行），
-  把现价倍数和十年中位写回《权益QDII_ETF_估值相对十年中位.xlsx》的蓝字格。
-  不改权重，不改加权 / 调和 / 当一家公司那些公式。
-  「当一家公司历史」是流水账：每次调用追加一行，不覆盖上次结果。
+1. 文件摆放
+两个 Python 脚本、gf_ticker_map.csv 和主表放在同一目录。
+映射文件相对于脚本位置读取，不依赖终端工作目录。
 
-装一次（Windows PowerShell 或 macOS / Linux 终端）
-  1. 安装 Python 3.10+（安装时勾选 Add Python to PATH）
-  2. 打开终端，进入本文件夹：
-       cd 本说明所在目录
-  3. 安装依赖：
-       pip install -r requirements.txt
-       playwright install chromium
+2. 安装（Python 3.10+）
+pip install -r requirements.txt
+playwright install chromium
 
-日常顺序（先关 Excel）
+3. 更新持仓
+python generate_valuation_sheet.py
+输入 Excel 每页三列：名称 / 代码 / 净值权重。
+推荐统一小数权重，例如 0.082 代表 8.2%；代码列使用文本。
+按提示生成输出，最后选择合并主表。
+同名页重建，旧估值按代码恢复；页内历史不迁移。
+汇总区下移时自动调整关联单元格公式，历史总账保留。
 
+4. 更新估值（先关闭 Excel）
+python update_gf_valuations.py
+或：
+python update_gf_valuations.py --sheet 399673_创业板50
+python update_gf_valuations.py --all
+python update_gf_valuations.py --file "权益QDII_ETF_估值相对十年中位.xlsx"
 
+默认权重门槛为 1%，全部持仓使用 --min-weight 0。
+--dry-run 不写 Excel，但仍可能采集网页、保存缓存。
+--snapshot-only 不抓网页，仅记录表内数据快照。
 
-python update_gf_valuations.py --file "..\权益QDII_ETF_估值相对十年中位.xlsx"
+5. 缓存
+gf_cache.json 默认复用 15 天，跨页共享。
+需要重新读取时，关闭脚本，手工删除缓存，再重新运行即可。
+也可执行 python update_gf_valuations.py --clear-cache，删除后退出。
+缓存是股票采集数据，不是组合历史快照。
 
+6. 当前口径
+负 EV/FCF 纳入加权、调和和“当一家公司”计算。
+EV 当前值不能为零，中位须为正；no_ev=1 时排除。
+几何平均只使用正值样本。
+PE/PB/PS 当前值或中位不为正时排除。
+历史快照上一条不足 100% 的中间记录可能被覆盖，并非每次都追加。
 
-
-
-
-
-
-
-
-
-
-
---------------------------------
-  1. 开一只调试 Chrome，手开一页确认 Min/Med：
-       "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\gf-chrome-%RANDOM%"
-       手开 https://www.gurufocus.com/term/pettm/RACE
-       不要用已经 block 过的 gf-chrome2。脚本换窗会自动建 gf-chrome-时间戳。
-       若全新目录第一页就是拦截页，是 IP 被记，换文件夹没用，换热点或等几小时。
-  2. 另开终端跑短命令：
-       cd /d C:\Users\kobayakawa\Desktop\GF估值更新器
-       python update_gf_valuations.py --file "..\权益QDII_ETF_估值相对十年中位.xlsx"
-     菜单选页（逗号多选，0=全部）。
-  3. 每一批只开 4 个 term 页；读完后脚本会关掉这只 9222 窗口，等间隔，再新开一只隐身开下 4 页。
-     这是以前能把表灌满的办法。不要把几十上百页挂在同一只长期窗口里。
-
-  已在 gf_cache.json 里的倍数会跳过开页。
-  表如果已经放在本文件夹里，--file 可以写成 ".\权益QDII_ETF_估值相对十年中位.xlsx"。
-
-  不写 --sheet 时会列出估值页，并显示该页备注里最近一次「GF自动 YYYY-MM-DD」。
-  输入序号回车，例如 6 = 118002_全球奢侈品，0 = 全部。
-
-  只预览不写表：
-  python update_gf_valuations.py --file ".\权益QDII_ETF_估值相对十年中位.xlsx" --dry-run
-
-  指定一页、不出现菜单：
-  python update_gf_valuations.py --file ".\权益QDII_ETF_估值相对十年中位.xlsx" --sheet 118002_全球奢侈品
-
-  新加页也可以直接点名：
-  python update_gf_valuations.py --sheet 520870_巴西IBOV
-  python update_gf_valuations.py --sheet 159329_沙特
-  python update_gf_valuations.py --sheet 161128_标普信息科技
-  python update_gf_valuations.py --sheet 513290_纳指生物
-
-注意
-  不要用 taskkill 关日常 Chrome。
-  不要加 --no-cache（会丢掉已抓到的数）。
-  批间隔默认 90 秒，要改用 --batch-wait 120。
-
-路径怎么写
-  .   = 当前文件夹（GF估值更新器）
-  ..  = 上一级文件夹（表原来所在的位置）
-  表如果已经复制进本文件夹，文件名即可，不必写 --file：
-       python update_gf_valuations.py --sheet 118002_全球奢侈品 --limit 3 --dry-run
-  等价写法：
-       python update_gf_valuations.py --file ".\权益QDII_ETF_估值相对十年中位.xlsx" --sheet 118002_全球奢侈品
-  表仍放在上一级、不复制进来时：
-       python update_gf_valuations.py --file "..\权益QDII_ETF_估值相对十年中位.xlsx" --sheet 118002_全球奢侈品
-
-第一次先干跑 3 只，确认代码映射没抓错交易所
-  python update_gf_valuations.py --sheet 118002_全球奢侈品 --limit 3 --dry-run
-
-确认打印里的 cur / med 和你浏览器里一致后，正式写回一页
-  python update_gf_valuations.py --sheet 118002_全球奢侈品
-
-更新整本（默认只抓权重 >= 1%）
-  python update_gf_valuations.py --all
-
-常用参数
-  --sheet 页名          可重复，例如 --sheet DIA_道指30前十 --sheet QQQ_纳指100前十
-  --all                 除总览 / 银行股息 / 口径说明外全部估值页
-  --min-weight 0.01     默认 1%；改成 0 则页上所有持仓都抓
-  --limit 10            每页最多抓几只，试跑用
-  --dry-run             只打印不写 Excel
-  --delay 2.0           两次打开网页间隔秒，被拦就加大
-  --no-cache            忽略本文件夹 gf_cache.json，强制重抓
-  --headed              弹出真 Chrome（过 Cloudflare 验证必须用这个）
-  --debug               抽不到数时把页面原文写到 gf_debug.txt
-  --cdp http://127.0.0.1:9222   连接你已经打开的 Chrome
-
-若 gf_debug.txt 里是 Attention Required / Cloudflare：
-  无头 Chromium 已被拉黑，你日常浏览器能开 GF 不等于脚本能开。
-  先覆盖新脚本，再二选一——
-
-  办法 A（推荐先试）：弹出窗口，手点一次验证
-    python update_gf_valuations.py --file ".\权益QDII_ETF_估值相对十年中位.xlsx" --sheet 118002_全球奢侈品 --limit 1 --dry-run --no-cache --headed
-    窗口里通过验证后，配置会留在 gf_chrome_profile\，以后可不再加 --headed。
-
-  办法 B：另开一只带调试口的 Chrome（不要关现有网页，不要用 taskkill）
-    直接再启动一枚独立配置的 Chrome，原窗口全部保留：
-      "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\gf-chrome"
-    在这个窗口打开 https://www.gurufocus.com/term/pettm/RACE 确认能看到 Min/Med，
-    另开一个命令行（必须加 --read-tab，否则脚本会在这只 Chrome 里跳转，立刻被封）：
-      python update_gf_valuations.py --file ".\权益QDII_ETF_估值相对十年中位.xlsx" --sheet 118002_全球奢侈品 --limit 1 --dry-run --cdp http://127.0.0.1:9222 --read-tab
-    若已出现 Sorry you have been blocked：关掉这只调试 Chrome，换新目录再开（例如 %TEMP%\gf-chrome2），等几分钟后再试一页。
-
-代码对不上时改 gf_ticker_map.csv
-  左列 local_code = 底稿 B 列（3998.HK、MC、HPG）
-  右列 gf_ticker  = 网址里那一段（HKSE:03998、XPAR:MC、HOSE:HPG）
-  skip=1          不抓（如 SPCX）
-  no_ps=1 / no_ev=1  抓数，但不把「进PS / 进EV」打成 1（银行、券商）
-  改完保存为 UTF-8。
-
-脚本会改哪些格
-  D/E PE现、PE十年中位
-  H/I PB
-  L/M PS
-  P/Q EV/FCF
-  G/K/O/S 进PE/进PB/进PS/进EV：现价和中位都 >0 才为 1，否则 0
-  T 备注开头加上「GF自动 YYYY-MM-DD」
-  C 列权重、第 6/10/14/18 列比值公式、汇总区「当一家公司」公式一律不动。
-  每次正式写回（或 --snapshot-only）会在该页底部「当一家公司历史」追加一行，
-  同时在整本「当一家公司历史」页再追加一行。旧行永不覆盖。
-  同一天跑两次 = 两行（时间精确到分钟）。
-
-只记快照、不抓网页
-  python update_gf_valuations.py --all --snapshot-only
-  python update_gf_valuations.py --sheet 118002_全球奢侈品 --snapshot-only
-
-注意
-  1. 先关 Excel 再跑，否则存不回去。
-  2. 同一只股票多页会共用 gf_cache.json，不必重复打开网页。
-  3. 负 FCF / 亏损：现价若页上是负数会写入；「进EV / 进PE」仍为 0。当一家公司那层继续用你们表里已有公式。
-  4. 页上没有十年 Med 的（上市不满十年、样本断档）中位留空，不编造。
-  5. Cloudflare 偶尔 403：把 --delay 加到 2.5，或隔几分钟再跑。缓存里已成功的不会重抓。
-  6. 持仓仍以中报为准，本脚本不更新权重。
+7. 模板更新
+代码修改不会自动替换现有 Excel 的旧公式。
+通过持仓生成流程重建对应计算页后，再运行估值更新器。
+更多参数：python update_gf_valuations.py --help

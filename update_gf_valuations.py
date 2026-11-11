@@ -1027,7 +1027,7 @@ def include_flag(current, median, forced_off: bool, field: str = "") -> int:
     # EV/FCF：负数也进（当一家公司、加权、调和都计入）。只看银行/券商的 no_ev。
     # PE/PB/PS：现价或中位 ≤ 0 不进。
     if field == "ev":
-        if median <= 0:
+        if median <= 0 or current == 0:
             return 0
         return 1
     if current <= 0 or median <= 0:
@@ -2228,3 +2228,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

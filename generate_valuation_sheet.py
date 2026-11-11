@@ -593,7 +593,7 @@ def _read_blue_values(ws):
 
 def _find_summary_start(ws):
     """找旧页「PE 覆盖净值%」所在行，作为汇总区起点。"""
-    for r in range(20, ws.max_row + 1):
+    for r in range(5, ws.max_row + 1):
         a = ws.cell(r, 1).value
         if a and str(a).startswith("PE 覆盖"):
             return r
@@ -628,6 +628,13 @@ def _restore_blues(ws, blues):
         if key in blues:
             for c, v in blues[key].items():
                 ws.cell(r, c, v)
+            flags = get_inclusion_flags(key)
+            for current_col, median_col, flag_col, allowed in zip(
+                    (4, 8, 12, 16), (5, 9, 13, 17), (7, 11, 15, 19), flags):
+                current, median = ws.cell(r, current_col).value, ws.cell(r, median_col).value
+                valid = (isinstance(current, (int, float)) and isinstance(median, (int, float))
+                         and median > 0 and (current != 0 if current_col == 16 else current > 0))
+                ws.cell(r, flag_col, int(bool(allowed and valid)))
             restored += 1
     return restored
 
@@ -657,6 +664,41 @@ def _shift_summary_refs(wb, sheet_name, old_start, new_start):
                         return match.group(1) + str(r + delta if old_start <= r <= old_start + 39 else r)
                     token.value = prefix + "!" + re.sub(r"(\$?[A-Za-z]{1,3}\$?)([0-9]+)", move, address)
                 cell.value = "=" + "".join(t.value for t in tokens)
+
+
+OVERVIEW_METRICS = [
+    (13, "B", 0), (14, "D", 0), (15, "D", 5),
+    (16, "B", 1), (17, "D", 1), (18, "B", 2), (19, "D", 2),
+    (20, "B", 3), (21, "D", 3), (22, "D", 6),
+    (23, "B", 8), (24, "D", 9), (25, "B", 9), (26, "D", 10),
+    (27, "B", 12), (28, "B", 13), (29, "B", 17),
+    (30, "B", 14), (31, "B", 15), (32, "B", 20),
+    (33, "B", 21), (34, "B", 22), (35, "B", 23),
+    (45, "B", 25), (46, "B", 26), (47, "B", 27), (48, "B", 28),
+]
+
+
+def _relink_overview(wb, sheet_name, summary_start):
+    """按指标重建目标列，不依赖旧公式正确或旧汇总区连续。"""
+    if "总览对比" not in wb.sheetnames:
+        return
+    ws = wb["总览对比"]
+    quoted = "'{}'".format(sheet_name.replace("'", "''"))
+    for col in range(2, ws.max_column + 1):
+        linked = False
+        for row, _, _ in OVERVIEW_METRICS:
+            value = ws.cell(row, col).value
+            if not isinstance(value, str) or not value.startswith("="):
+                continue
+            for token in Tokenizer(value).items:
+                if token.type == "OPERAND" and token.subtype == "RANGE" and "!" in token.value:
+                    prefix = token.value.rsplit("!", 1)[0]
+                    target = prefix[1:-1].replace("''", "'") if prefix.startswith("'") and prefix.endswith("'") else prefix
+                    linked = linked or target == sheet_name
+        if not linked and ws.cell(4, col).value != sheet_name:
+            continue
+        for row, letter, offset in OVERVIEW_METRICS:
+            ws.cell(row, col, "={}!{}{}".format(quoted, letter, summary_start + offset))
 
 
 def merge_into_main(input_path, main_path, sheet_names=None):
@@ -705,6 +747,7 @@ def merge_into_main(input_path, main_path, sheet_names=None):
             _copy_sheet_content(tmp_ws, dest)
 
             _shift_summary_refs(main, out_name, old_summary, info["summary_start"])
+            _relink_overview(main, out_name, info["summary_start"])
             note = ""
             if old_summary and info["summary_start"] != old_summary:
                 note = "（汇总区从第{}行移到第{}行，关联汇总引用已同步更新）".format(

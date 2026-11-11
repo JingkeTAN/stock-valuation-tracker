@@ -39,13 +39,47 @@ class WorkflowTests(unittest.TestCase):
             src.save(source)
             gen.merge_into_main(source, main)
             result = openpyxl.load_workbook(main)
-            self.assertEqual(result['总览对比']['B45'].value, "='测试页'!$B$132")
+            self.assertEqual(result['总览对比']['B45'].value, "='测试页'!B132")
             self.assertEqual(result['总览对比']['C1'].value, '="测试页!B85"')
             self.assertEqual(result['总览对比']['D1'].value, "='测试页'!B5")
             self.assertEqual(result['测试页']['D5'].value, 20)
             self.assertEqual(result['测试页']['A150'].value, '当一家公司历史')
             self.assertEqual(result['当一家公司历史']['A5'].value, '旧快照')
             self.assertEqual(result.sheetnames, wb.sheetnames)
+
+    def test_legacy_vietnam_layout_and_repeated_updates(self):
+        with tempfile.TemporaryDirectory() as d:
+            main, source = Path(d) / 'main.xlsx', Path(d) / 'input.xlsx'
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = '008763_天弘越南'
+            ws['A18'] = 'PE 覆盖净值%'
+            ws['B5'], ws['D5'], ws['E5'] = 'FPT', 18.37, 29.55
+            ws['P5'], ws['Q5'] = -66.24, 9.27
+            ws['B6'], ws['P6'], ws['Q6'] = 'VIC', 25.72, -7.95
+            overview = wb.create_sheet('总览对比')
+            overview['G4'] = '008763 天弘越南市场股票A'
+            overview['G35'] = "='008763_天弘越南'!B67"
+            overview['G45'] = "='008763_天弘越南'!B87"
+            wb.save(main)
+            self.assertEqual(gen._find_summary_start(ws), 18)
+            for count in (10, 10, 100):
+                src = openpyxl.Workbook()
+                src.active.title = ws.title
+                src.active.append(['名称', '代码', '净值权重'])
+                for n in range(count):
+                    src.active.append(['公司', ['FPT', 'VIC'][n] if n < 2 else 'T' + str(n), 1 / count])
+                src.save(source)
+                gen.merge_into_main(source, main)
+                result = openpyxl.load_workbook(main)
+                target = result[ws.title]
+                start = gen._find_summary_start(target)
+                for row, col, offset in gen.OVERVIEW_METRICS:
+                    self.assertEqual(result['总览对比'].cell(row, 7).value,
+                                     "='008763_天弘越南'!{}{}".format(col, start + offset))
+                self.assertEqual(target['S5'].value, 1)
+                self.assertEqual(target['S6'].value, 0)
+                self.assertIn('P5=0', target['R5'].value)
 
     def test_mapping_path_is_script_relative(self):
         self.assertEqual(Path(gen.GF_MAP_PATH), ROOT / 'gf_ticker_map.csv')

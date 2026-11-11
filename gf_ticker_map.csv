@@ -1,0 +1,522 @@
+local_code,gf_ticker,no_pe,no_pb,no_ps,no_ev,skip,note
+# local_code = 底稿B列（大小写不敏感）。gf_ticker = gurufocus.com/term/{slug}/{gf_ticker},,,,,,,
+# GF交易所前缀（2026-09-22核实）：美股裸代码；港股HKSE:5位；欧XPAR/XSWX/XTER/XMAD/MIL/XAMS/LSE/WBO,,,,,,,
+# 越南STC(=HOSE) 泰国BKK 印度NSE 马来XKLS(不是KLSE) 印尼ISX(不是IDX) 新交所SGX 台TPE 韩XKRX 日TSE 巴西BSP,,,,,,,
+# skip=1不抓。no_pe/no_pb/no_ps/no_ev=1 不抓、不提示开页，且「进该项」强制为 0。,,,,,,,
+#,,,,,,,
+# ===== 跳过 =====,,,,,,,
+SPCX,,,,,,1,SpaceX未上市
+#,,,,,,,
+# ===== 美股：金融旗帜 / 特殊口径（裸代码即可）=====,,,,,,,
+JPM,JPM,,,1,1,,银行不进PS/EV
+GS,GS,,,1,1,,投行不进PS/EV
+AXP,AXP,,,1,1,,运通作金融口径不进PS/EV
+TRV,TRV,,,1,1,,保险不进PS/EV
+HD,HD,,1,,,,家得宝PB中位被回购扭曲不进PB
+V,V,,,,,,Visa支付网络，进PS/EV（2026-09-22改：原先误标银行旗）
+#,,,,,,,
+# ===== 美股：底稿已出现、裸代码直达（显式列出防漏）=====,,,,,,,
+AAPL,AAPL,,,,,,
+ABNB,ABNB,,,,,,
+AMAT,AMAT,,,,,,
+KLAC,KLAC,,,,,,科磊，161128 ≥1%
+ORCL,ORCL,,,,,,
+QCOM,QCOM,,,,,,
+AMD,AMD,,,,,,
+AMGN,AMGN,,,,,,
+# ===== 513290 纳指生物（NBI/IBB）=====,,,,,,,
+VRTX,VRTX,,,,,,
+GILD,GILD,,1,,,,吉利德 TTM 亏损打薄账面，PB 贴十年最高不进
+REGN,REGN,,,,,,
+ALNY,ALNY,,,,,,
+RVMD,RVMD,,,,,,
+BIIB,BIIB,,,,,,
+MRNA,MRNA,,,,,,
+ARGX,ARGX,,,,,,
+ROIV,ROIV,,,,,,
+RPRX,RPRX,,,,,,
+INSM,INSM,,,,,,
+UTHR,UTHR,,,,,,
+INCY,INCY,,,,,,
+GH,GH,,,,,,
+VTRS,VTRS,,,,,,
+NBIX,NBIX,,,,,,
+ASND,ASND,,,,,,
+MEDP,MEDP,,,,,,
+JAZZ,JAZZ,,,,,,
+BBIO,BBIO,,,,,,
+AMZN,AMZN,,,,,,
+AVGO,AVGO,,,,,,
+AZO,AZO,,,,,,
+BA,BA,,,,,,
+BKNG,BKNG,,,,,,
+CAT,CAT,,,,,,
+CCL,CCL,,,,,,
+CMG,CMG,,,,,,
+COST,COST,,,,,,
+CRM,CRM,,,,,,
+CRWD,CRWD,,,,,,
+CSCO,CSCO,,,,,,
+CVNA,CVNA,,,,,,
+CVX,CVX,,,,,,
+DASH,DASH,,,,,,
+DHI,DHI,,,,,,
+DIS,DIS,,,,,,
+EBAY,EBAY,,,,,,
+F,F,,,,,,
+GM,GM,,,,,,
+GOOG,GOOG,,,,,,
+GOOGL,GOOGL,,,,,,
+GRAB,GRAB,,,,,,
+HLT,HLT,,,,,,
+HON,HON,,,,,,
+IBM,IBM,,,,,,
+INFY,INFY,,,,,,Infosys ADR
+INTC,INTC,,,,,,
+JNJ,JNJ,,,,,,
+LOW,LOW,,,,,,
+LRCX,LRCX,,,,,,
+MAR,MAR,,,,,,
+MCD,MCD,,,,,,
+MELI,MELI,,,,,,
+META,META,,,,,,
+MMM,MMM,,,,,,
+MRK,MRK,,,,,,
+MSFT,MSFT,,,,,,
+MU,MU,,,,,,
+NFLX,NFLX,,,,,,
+NKE,NKE,,,,,,
+NVDA,NVDA,,,,,,
+ORLY,ORLY,,,,,,
+PANW,PANW,,,,,,
+PDD,PDD,,,,,,
+PG,PG,,,,,,
+PLTR,PLTR,,,,,,
+RACE,RACE,,,,,,Ferrari
+RCL,RCL,,,,,,
+ROST,ROST,,,,,,
+SBUX,SBUX,,,,,,
+SE,SE,,,,,,Sea
+SHW,SHW,,,,,,
+SNDK,SNDK,,,,,,Sandisk分拆历史短
+TJX,TJX,,,,,,
+TOL,TOL,,,,,,
+TPR,TPR,,,,,,Tapestry
+TSLA,TSLA,,,,,,
+TXN,TXN,,,,,,
+UBER,UBER,,,,,,
+UNH,UNH,,,,,,
+WIT,WIT,,,,,,Wipro ADR
+WMT,WMT,,,,,,
+WSM,WSM,,,,,,
+YUM,YUM,,,,,,
+YUMC,YUMC,,,,,,百胜中国用美股页
+#,,,,,,,
+# ===== 港股：中概用ADR（港股term页易被拦）=====,,,,,,,
+0700.HK,TCEHY,,,,,,Tencent ADR
+00700.HK,TCEHY,,,,,,Tencent ADR别名
+700.HK,TCEHY,,,,,,Tencent ADR别名
+3690.HK,HKSE:03690,1,,,,美团；TTM常亏损不进PE。主码港股不要粉单MPNGF,
+9988.HK,BABA,,,,,,Alibaba ADR
+9618.HK,JD,,,,,,JD ADR
+9888.HK,BIDU,,,,,,Baidu ADR
+9999.HK,NTES,,,,,,NetEase ADR
+9961.HK,TCOM,,,,,,Trip.com ADR
+09987.HK,YUMC,,,,,,百胜中国港股代码别名
+#,,,,,,,
+# ===== 港股：本地HKSE五位（消费/制造，无稳定ADR）=====,,,,,,,
+0142.HK,HKSE:00142,,,,,,第一太平
+0168.HK,HKSE:00168,,,,,,青岛啤酒
+0288.HK,HKSE:00288,,,,,,万洲国际
+0291.HK,HKSE:00291,,,,,,华润啤酒
+0300.HK,HKSE:00300,,,,,,美的集团H
+0322.HK,HKSE:00322,,,,,,康师傅
+0780.HK,HKSE:00780,,,,,,同程旅行
+1024.HK,HKSE:01024,,,,,,快手
+1044.HK,HKSE:01044,,,,,,恒安国际
+1070.HK,HKSE:01070,,,,,,TCL电子
+1810.HK,HKSE:01810,,,,,,小米
+1910.HK,HKSE:01910,,,,,,新秀丽
+1929.HK,HKSE:01929,,,,,,周大福
+2015.HK,HKSE:02015,,,,,,理想汽车
+2020.HK,HKSE:02020,,,,,,安踏体育
+2313.HK,HKSE:02313,,,,,,申洲国际
+2319.HK,HKSE:02319,,,,,,蒙牛乳业
+2331.HK,HKSE:02331,,,,,,李宁
+2367.HK,HKSE:02367,,,,,,巨子生物
+3998.HK,HKSE:03998,,,,,,波司登
+6181.HK,HKSE:06181,,,,,,老铺黄金 2024上市
+6186.HK,HKSE:06186,,,,,,中国飞鹤
+6690.HK,HKSE:06690,,,,,,海尔智家H
+6862.HK,HKSE:06862,,,,,,海底捞
+6969.HK,HKSE:06969,,,,,,思摩尔
+9633.HK,HKSE:09633,,,,,,农夫山泉
+9866.HK,HKSE:09866,,,,,,蔚来港股
+9868.HK,HKSE:09868,,,,,,小鹏港股
+9896.HK,HKSE:09896,,,,,,名创优品
+09992.HK,HKSE:09992,,,,,,泡泡玛特
+#,,,,,,,
+# ===== 欧洲：短码必须绑交易所，否则SAN/OR/AI/BBY/BG会撞美股 =====,,,,,,,
+MC,XPAR:MC,,,,,,LVMH
+RMS,XPAR:RMS,,,,,,Hermes
+KER,XPAR:KER,,,,,,Kering
+OR,XPAR:OR,,,,,,LOreal（裸OR会撞错）
+CDI,XPAR:CDI,,,,,,Christian Dior
+SAF,XPAR:SAF,,,,,,Safran
+AI,XPAR:AI,,,,,,Air Liquide（裸AI会撞C3.ai）
+ENGI,XPAR:ENGI,,,,,,Engie
+GLE,XPAR:GLE,,,1,1,,SocGen银行
+SPIE,XPAR:SPIE,,,,,,SPIE
+ENX,XPAR:ENX,,,,,,Euronext
+STMPA,XPAR:STMPA,,,,,,STMicro
+SAN.PA,XPAR:SAN,,,,,,Sanofi（别用裸SAN）
+CFR,XSWX:CFR,,,,,,Richemont
+NESN,XSWX:NESN,,,,,,Nestle
+GALD,XSWX:GALD,,,,,,Galderma
+MBG,XTER:MBG,,,,,,Mercedes
+BMW,XTER:BMW,,,,,,BMW
+ALV,XTER:ALV,,,1,1,,Allianz保险；PS可进、EV/FCF会计噪音不进
+DB1,XTER:DB1,,,,,,Deutsche Boerse
+ENR,XTER:ENR,,,,,,Siemens Energy
+NDX1,XTER:NDX1,,,,,,Nordex
+RWE,XTER:RWE,,,,,,RWE
+CON,XTER:CON,,,,,,Continental
+SAN,XMAD:SAN,,,1,1,,Santander银行（裸SAN≠Sanofi）
+UCG,MIL:UCG,,,1,1,,UniCredit
+UNI,MIL:UNI,,,1,1,,Unipol保险
+INGA,XAMS:INGA,,,1,1,,ING
+ASRNL,XAMS:ASRNL,,,1,1,,ASR保险
+AD,XAMS:AD,,,,,,Ahold Delhaize
+SHEL,LSE:SHEL,,,,,,Shell
+CCH,LSE:CCH,,,,,,Coca-Cola HBC
+RIO,LSE:RIO,,,,,,Rio Tinto伦敦
+RR,LSE:RR.,,,,,,Rolls-Royce（GF带点）
+GSK,LSE:GSK,,,,,,
+SSE,LSE:SSE,,,,,,
+NWG,LSE:NWG,,,1,1,,NatWest
+BARC,LSE:BARC,,,1,1,,Barclays
+NXT,LSE:NXT,,,,,,Next plc（裸NXT会撞美股NextDecade）
+DGE,LSE:DGE,,,,,,Diageo
+BBY,LSE:BBY,,,,,,Balfour Beatty（裸BBY=Best Buy）
+BG,WBO:BG,,,1,1,,BAWAG银行（GF用WBO:不是WBAG；裸BG=Bunge）
+ASML,ASML,,,,,,阿斯麦用美股/阿姆斯特丹同一套
+#,,,,,,,
+# ===== 越南 HOSE = GF的STC =====,,,,,,,
+HPG,STC:HPG,,,,,,Hoa Phat
+VIC,STC:VIC,,,,,,Vingroup 调和PE可进、相对PE视中位
+MWG,STC:MWG,,,,,,
+FPT,STC:FPT,,,,,,
+STB,STC:STB,,,1,1,,银行
+MBB,STC:MBB,,,1,1,,银行
+VHM,STC:VHM,,,,,,
+TCB,STC:TCB,,,1,1,,银行
+VPB,STC:VPB,,,1,1,,银行
+MSN,STC:MSN,,,,,,
+ACB,STC:ACB,,,1,1,,银行
+HDB,STC:HDB,,,1,1,,银行
+VCB,STC:VCB,,,1,1,,银行
+VNM,STC:VNM,,,,,,Vinamilk（别当成VanEck VNM ETF）
+CTG,STC:CTG,,,1,1,,银行
+VJC,STC:VJC,,,,,,Vietjet
+LPB,STC:LPB,,,1,1,,银行
+SSI,STC:SSI,,,1,1,,券商
+NLG,STC:NLG,,,,,,
+VRE,STC:VRE,,,,,,
+BID,STC:BID,,,1,1,,银行
+#,,,,,,,
+# ===== 印度 / 泰国 / 马来 / 印尼 / 新加坡 =====,,,,,,,
+RELIANCE.NS,NSE:RELIANCE,,,,,,
+HDFCBANK.NS,NSE:HDFCBANK,,1,1,1,,银行；账面断裂不进PB
+ICICIBANK.NS,NSE:ICICIBANK,,,1,1,,银行
+DELTA.BK,BKK:DELTA,,,,,,
+PTT.BK,BKK:PTT,,,,,,
+ADVANC.BK,BKK:ADVANC,,1,,,,AIS账面断裂不进PB
+TNB.KL,XKLS:5347,,,,,,Tenaga（GF是XKLS不是KLSE）
+MAY.KL,XKLS:1155,,,1,1,,Maybank（GF是XKLS不是KLSE）
+4197.KL,XKLS:4197,,,,,,Sime Darby
+0166.KL,XKLS:0166,,,,,,Inari
+BBCA.JK,ISX:BBCA,,,1,1,,BCA（GF是ISX不是IDX）
+ASII,ISX:ASII,,,,,,Astra（底稿无.JK后缀）
+ASII.JK,ISX:ASII,,,,,,Astra别名
+GOTO,ISX:GOTO,,,,,,GoTo
+GOTO.JK,ISX:GOTO,,,,,,GoTo别名
+V03,SGX:V03,,,,,,Venture
+#,,,,,,,
+# ===== 台韩日 =====,,,,,,,
+2330.TW,TPE:2330,,,,,,TSMC
+2454.TW,TPE:2454,,,,,,MediaTek
+005930.KS,XKRX:005930,,,,,,Samsung
+000660.KS,XKRX:000660,,,,,,SK Hynix
+8306.T,TSE:8306,,,1,1,,三菱日联银行
+7203.T,TSE:7203,,,,,,Toyota
+6857.T,TSE:6857,,,,,,Advantest
+8035.T,TSE:8035,,,,,,Tokyo Electron
+# ===== 巴西 B3 / 520870 穿透（GF 前缀是 BSP 不是 BVMF/B3）=====,,,,,,,
+VALE3,BSP:VALE3,,,,,,淡水河谷
+ITUB4,BSP:ITUB4,,,1,1,,伊塔乌银行
+PETR4,BSP:PETR4,,,,,,巴西石油优先
+PETR3,BSP:PETR3,,,,,,巴西石油普通；倍数与 PETR4 同一发行人
+AXIA3,BSP:AXIA3,,,,,,Axia/原 Eletrobras
+BBDC4,BSP:BBDC4,,,1,1,,布拉德斯科
+B3SA3,BSP:B3SA3,,,,,,B3 交易所
+ITSA4,BSP:ITSA4,,,1,1,,伊塔乌控股
+WEGE3,BSP:WEGE3,,,,,,WEG
+SBSP3,BSP:SBSP3,,,,,,Sabesp
+EMBJ3,BSP:EMBJ3,,,,,,Embraer
+BPAC11,BSP:BPAC11,,,1,1,,BTG Pactual 单位
+ABEV3,BSP:ABEV3,,,,,,Ambev
+BBAS3,BSP:BBAS3,,,1,1,,巴西银行
+ENEV3,BSP:ENEV3,,,,,,Eneva
+PRIO3,BSP:PRIO3,,,,,,Prio
+EQTL3,BSP:EQTL3,,,,,,Equatorial
+CPLE3,BSP:CPLE3,,,,,,Copel
+VBBR3,BSP:VBBR3,,,,,,Vibra
+RDOR3,BSP:RDOR3,,,,,,Rede D Or
+UGPA3,BSP:UGPA3,,,,,,Ultrapar
+RENT3,BSP:RENT3,,,,,,Localiza
+GGBR4,BSP:GGBR4,,,,,,Gerdau
+SUZB3,BSP:SUZB3,,,,,,Suzano
+RADL3,BSP:RADL3,,,,,,Raia Drogasil
+# ===== 沙特 Tadawul / 159329·2830（GF 前缀 SAU）=====,,,,,,,
+1120,SAU:1120,,,1,1,,拉吉希银行
+2222,SAU:2222,,,,,,沙特阿美 2019 上市，十年中位大概率没有
+1180,SAU:1180,,,1,1,,沙特国民银行
+1211,SAU:1211,,,,,,Maaden
+7010,SAU:7010,,,,,,STC
+2010,SAU:2010,,,,,,SABIC
+2082,SAU:2082,,,,,,ACWA Power
+1010,SAU:1010,,,1,1,,利雅得银行
+1060,SAU:1060,,,1,1,,沙特第一银行
+1150,SAU:1150,,,1,1,,Alinma
+4013,SAU:4013,,,,,,Habib 医疗
+2020,SAU:2020,,,,,,SABIC Agri
+7020,SAU:7020,,,,,,Mobily
+2280,SAU:2280,,,,,,Almarai
+1050,SAU:1050,,,1,1,,法国沙特银行
+1080,SAU:1080,,,1,1,,阿拉伯国民银行
+1140,SAU:1140,,,1,1,,Bank Albilad
+7203,SAU:7203,,,,,,ELM
+LLY,LLY,,,,,,礼来；513850 ≥1%
+BRK.B,BRK.B,,,,,,伯克希尔B；513850。不要写成 BRK/B
+XOM,XOM,,,,,,埃克森美孚；513850。能源周期分母
+ABBV,ABBV,,,,,,艾伯维；513850 ≥1%
+BHARTIARTL.NS,NSE:BHARTIARTL,,,,,,
+SBIN.NS,NSE:SBIN,,,1,1,,银行
+M&M.NS,NSE:M&M,,,,,,
+AXISBANK.NS,NSE:AXISBANK,,,1,1,,银行
+LT.NS,NSE:LT,,,,,,
+BEL.NS,NSE:BEL,,,,,,
+APOLLOHOSP.NS,NSE:APOLLOHOSP,,,,,,
+ETERNAL.NS,NSE:ETERNAL,,,,,,原Zomato，上市短
+TITAN.NS,NSE:TITAN,,,,,,
+SHRIRAMFIN.NS,NSE:SHRIRAMFIN,,,1,1,,NBFC
+CHOLAFIN.NS,NSE:CHOLAFIN,,,1,1,,NBFC
+ACUTAAS.NS,NSE:ACUTAAS,,,,,,上市短
+GRASIM.NS,NSE:GRASIM,,,,,,
+TVSMOTOR.NS,NSE:TVSMOTOR,,,,,,
+CGPOWER.NS,NSE:CGPOWER,,,,,,
+MCX.NS,NSE:MCX,,,,,,
+AUBANK.NS,NSE:AUBANK,,,1,1,,银行
+DIVISLAB.NS,NSE:DIVISLAB,,,,,,
+RADICO.NS,NSE:RADICO,,,,,,
+KEI.NS,NSE:KEI,,,,,,
+SBILIFE.NS,NSE:SBILIFE,,,1,1,,保险
+DLF.NS,NSE:DLF,,,,,,
+CUMMINSIND.NS,NSE:CUMMINSIND,,,,,,
+LODHA.NS,NSE:LODHA,,,,,,2021上市
+COFORGE.NS,NSE:COFORGE,,,,,,
+HAL.NS,NSE:HAL,,,,,,
+SIEMENS.NS,NSE:SIEMENS,,,,,,印度西门子
+TATAPOWER.NS,NSE:TATAPOWER,,,,,,
+TORNTPHARM.NS,NSE:TORNTPHARM,,,,,,
+LGEINDIA.NS,NSE:LGEINDIA,,,,,,上市短
+ASIANPAINT.NS,NSE:ASIANPAINT,,,,,,
+FEDERALBNK.NS,NSE:FEDERALBNK,,,1,1,,银行
+JINDALSTEL.NS,NSE:JINDALSTEL,,,,,,
+IFAST.SI,SGX:AIY,,,,,,iFAST
+C07.SI,SGX:C07,,,,,,Jardine Cycle & Carriage
+0138.KL,XKLS:0138,,,,,,MyEG
+5296.KL,XKLS:5296,,,,,,Mr DIY
+KCE.BK,BKK:KCE,,,,,,KCE Electronics
+CCET.BK,BKK:CCET,,,,,,Cal-Comp
+3867.KL,XKLS:3867,,,,,,MPI
+HANA.BK,BKK:HANA,,,,,,Hana Microelectronics
+CBA.AX,ASX:CBA,,,1,1,,澳洲联邦银行
+9984.T,TSE:9984,,,,,,软银集团
+8316.T,TSE:8316,,,1,1,,三井住友金融
+6501.T,TSE:6501,,,,,,日立
+6758.T,TSE:6758,,,,,,索尼
+KBANK.BK,BKK:KBANK,,,1,1,,开泰银行
+1295.KL,XKLS:1295,,,1,1,,大众银行 Public Bank
+1023.KL,XKLS:1023,,,1,1,,联昌 CIMB
+BBRI.JK,ISX:BBRI,,,1,1,,人民银行 BRI
+SCB.BK,BKK:SCB,,,1,1,,开泰集团 SCB X
+BMRI.JK,ISX:BMRI,,,1,1,,曼迪利银行
+INFY.NS,NSE:INFY,,,,,,印孚瑟斯
+TCS.NS,NSE:TCS,,,,,,塔塔咨询
+BAJFINANCE.NS,NSE:BAJFINANCE,,,1,1,,巴贾杰金融 NBFC
+KOTAKBANK.NS,NSE:KOTAKBANK,,,1,1,,科塔克银行
+SUNPHARMA.NS,NSE:SUNPHARMA,,,,,,太阳制药
+HINDUNILVR.NS,NSE:HINDUNILVR,,,,,,印度联合利华
+MARUTI.NS,NSE:MARUTI,,,,,,马尔蒂铃木
+6098.T,TSE:6098,,,,,,Recruit
+8411.T,TSE:8411,,,1,1,,瑞穗银行
+005935.KS,XKRX:005935,,,,,,三星优先
+8058.T,TSE:8058,,,,,,三菱商事
+6861.T,TSE:6861,,,,,,基恩士 Keyence
+8766.T,TSE:8766,,,1,1,,东京海上 保险
+8001.T,TSE:8001,,,,,,伊藤忠
+6981.T,TSE:6981,,,,,,村田制造
+8031.T,TSE:8031,,,,,,三井物产
+7011.T,TSE:7011,,,,,,三菱重工
+6503.T,TSE:6503,,,,,,三菱电机
+4063.T,TSE:4063,,,,,,信越化学
+6752.T,TSE:6752,,,,,,松下
+4502.T,TSE:4502,,,,,,武田药品
+9983.T,TSE:9983,,,,,,迅销 Fast Retailing
+7974.T,TSE:7974,,,,,,任天堂
+9432.T,TSE:9432,,,,,,NTT
+# ===== 03431 南方港韩科技 韩股穿透（2026-10-17）=====,,,,,,,
+000660.KS,XKRX:000660,,,,,,SK Hynix
+005930.KS,XKRX:005930,,,,,,Samsung Electronics
+035420.KS,XKRX:035420,,,,,,Naver
+035720.KS,XKRX:035720,,,,,,Kakao
+009150.KS,XKRX:009150,,,,,,Samsung Electro-Mechanics
+298040.KS,XKRX:298040,,,,,,Hyosung Heavy Industries
+010120.KS,XKRX:010120,,,,,,LS Electric
+018260.KS,XKRX:018260,,,,,,Samsung SDS
+259960.KS,XKRX:259960,,,,,,Krafton
+042700.KS,XKRX:042700,,,,,,Hanmi Semiconductor
+# 港股（部分已有，补全）,,,,,,,
+0992.HK,HKSE:00992,,,,,,Lenovo
+0981.HK,HKSE:00981,,,,,,SMIC
+1347.HK,HKSE:01347,,,,,,Hua Hong
+1888.HK,HKSE:01888,,,,,,Kingboard Laminates
+6618.HK,HKSE:06618,,,,,,JD Health
+2382.HK,HKSE:02382,,,,,,Sunny Optical
+0020.HK,HKSE:00020,,,,,,SenseTime
+9660.HK,HKSE:09660,,,,,,Horizon Robotics
+9626.HK,HKSE:09626,,,,,,Bilibili
+KO,KO,,,,,,
+LIN,LIN,,,,,,
+9992.HK,HKSE:09992,,,,,,泡泡玛特
+9987.HK,HKSE:09987,,,,,,百胜中国
+CFR.SW,XSWX:CFR,,,,,,历峰
+MC.PA,XPAR:MC,,,,,,LVMH
+RMS.PA,XPAR:RMS,,,,,,爱马仕
+OR.PA,XPAR:OR,,,,,,欧莱雅
+KER.PA,XPAR:KER,,,,,,开云
+1209.HK,HKSE:01209,,,,,,万象生活
+0883.HK,HKSE:00883,,,,,,中海油
+3808.HK,HKSE:03808,,,,,,中国重汽
+0941.HK,HKSE:00941,,,,,,中国移动
+ICICIBC,NSE:ICICIBANK,0,0,1,1,1,银行
+HDFCB,NSE:HDFCBANK,0,1,1,1,1,银行 no_pb
+RELIANCE,NSE:RELIANCE,,,,,,信实
+MM,NSE:M&M,,,,,,马恒达
+SBIN,NSE:SBIN,0,0,1,1,1,银行
+BHARTI,NSE:BHARTIARTL,,,,,,巴帝电信
+AXSB,NSE:AXISBANK,0,0,1,1,1,银行
+TTAN,NSE:TITAN,,,,,,泰坦
+APHS,NSE:APOLLOHOSP,,,,,,阿波罗医院
+ETERNAL,NSE:ETERNAL,,,,,,Eternal
+1155.KL,XKLS:1155,0,0,1,1,1,MAYBANK 银行
+5347.KL,XKLS:5347,,,,,,TENAGA
+SIME.KL,XKLS:4197,,,,,,Sime Darby
+V03.SI,SGX:V03,,,,,,Venture
+INARI.KL,XKLS:0166,,,,,,Inari Amertron
+AIY.SI,SGX:AIY,,,,,,iFAST
+MRDIY.KL,XKLS:5296,,,,,,Mr DIY
+KARO,KARO,,,,,,Karooooo
+MPI.KL,XKLS:3867,,,,,,Malaysian Pacific Industries
+0208.KL,XKLS:0208,,,,,,Greatech
+D05.SI,SGX:D05,0,0,1,0,1,DBS 银行
+VALE3.SA,BSP:VALE3,,,,,,VALE
+ITUB4.SA,BSP:ITUB4,0,0,1,0,1,ITUB 银行
+PETR4.SA,BSP:PETR4,,,,,,PETR4
+PETR3.SA,BSP:PETR3,,,,,,PETR3
+AXIA3.SA,BSP:AXIA3,,,,,,AXIA
+SBSP3.SA,BSP:SBSP3,,,,,,SBSP
+BBDC4.SA,BSP:BBDC4,0,0,1,0,1,BBDC 银行
+B3SA3.SA,BSP:B3SA3,,,,,,B3SA
+ITSA4.SA,BSP:ITSA4,0,0,1,0,1,ITSA 控股
+BPAC11.SA,BSP:BPAC11,0,0,1,0,1,BPAC 银行
+RJHI.SR,SAU:1120,0,0,1,1,1,Al Rajhi 银行
+2222.SR,SAU:2222,,,,,,Saudi Aramco
+SNB.SR,SAU:1180,0,0,1,1,1,Saudi National Bank
+MAADEN.SR,SAU:1211,,,,,,Maaden
+STC.SR,SAU:7010,,,,,,Saudi Telecom
+SABIC.SR,SAU:2010,,,,,,SABIC
+RIBL.SR,SAU:1010,0,0,1,1,1,Riyad Bank
+ACWA.SR,SAU:2082,,,,,,ACWA Power
+ALINMA.SR,SAU:1150,0,0,1,1,1,Alinma Bank
+SABB.SR,SAU:1060,0,0,1,1,1,Saudi Awwal Bank
+SAFCO.SR,SAU:2020,,,,,,SABIC Agri
+BSF.SR,SAU:1050,0,0,1,0,1,Banque Saudi Fransi
+SULAIMAN.SR,SAU:4013,,,,,,Dr Sulaiman
+EEC.SR,SAU:7020,,,,,,Etihad Etisalat
+ALMARAI.SR,SAU:2280,,,,,,Almarai
+ARNB.SR,SAU:1080,0,0,1,1,1,Arab National Bank
+ALBI.SR,SAU:1140,0,0,1,1,1,Bank Albilad
+ELM.SR,SAU:7203,,,,,,Elm
+SECO.SR,SAU:5110,,,,,,Saudi Electricity
+ROP,XSWX:ROG,,,,,,Roche
+402340.KS,XKRX:402340,,,,,,SK Square
+RBLX,RBLX,,,,,,Roblox
+ILMN,ILMN,,,,,,Illumina
+EXEL,EXEL,,,,,,Exelixis
+
+GRMN,GRMN,,,,,,Garmin
+MA,MA,,,,,,Mastercard
+
+# ===== CN2673 创业板50 (A股 SZSE) 2026-11-05 =====
+300115,SZSE:300115,,,,,,长盈精密
+300207,SZSE:300207,,,,,,欣旺达
+300223,SZSE:300223,,,,,,君正股份
+300748,SZSE:300748,,,,,,金力永磁
+300750,SZSE:300750,,,,,,宁德时代
+300763,SZSE:300763,,,,,,锦浪科技
+300274,SZSE:300274,,,,,,阳光电源
+300346,SZSE:300346,,,,,,南大光电
+300373,SZSE:300373,,,,,,扬杰科技
+300395,SZSE:300395,,,,,,菲利华
+300408,SZSE:300408,,,,,,三环集团
+300458,SZSE:300458,,,,,,全志科技
+300017,SZSE:300017,,,,,,网宿科技
+300059,SZSE:300059,,,1,1,,东方财富 金融口径不进PS/EV
+300604,SZSE:300604,,,,,,长川科技
+300620,SZSE:300620,,,,,,光库科技
+300251,SZSE:300251,,,,,,光线传媒
+300058,SZSE:300058,,,,,,蓝色光标
+300015,SZSE:300015,,,,,,爱尔眼科
+300136,SZSE:300136,,,,,,信维通信
+300760,SZSE:300760,,,,,,迈瑞医疗
+300394,SZSE:300394,,,,,,天孚通信
+300548,SZSE:300548,,,,,,长芯博创
+300308,SZSE:300308,,,,,,中际旭创
+300502,SZSE:300502,,,,,,新易盛
+300803,SZSE:300803,,,,,,指南针
+300857,SZSE:300857,,,,,,协创数据
+301236,SZSE:301236,,,,,,软通动力
+300014,SZSE:300014,,,,,,亿纬锂能
+300033,SZSE:300033,,,,,,同花顺
+300316,SZSE:300316,,,,,,晶盛机电
+300433,SZSE:300433,,,,,,蓝思科技
+300474,SZSE:300474,,,,,,景嘉微
+300339,SZSE:300339,,,,,,润和软件
+300475,SZSE:300475,,,,,,香农芯创
+301308,SZSE:301308,,,,,,江波龙
+300073,SZSE:300073,,,,,,当升科技
+300124,SZSE:300124,,,,,,汇川技术
+300255,SZSE:300255,,,,,,常山药业
+300782,SZSE:300782,,,,,,卓胜微
+300390,SZSE:300390,,,,,,天华新能
+300418,SZSE:300418,,,,,,昆仑万维
+300442,SZSE:300442,,,,,,润泽科技
+300496,SZSE:300496,,,,,,中科创达
+300724,SZSE:300724,,,,,,捷佳伟创
+300751,SZSE:300751,,,,,,迈为股份
+302132,SZSE:302132,,,,,,中航成飞
+300450,SZSE:300450,,,,,,先导智能
+300757,SZSE:300757,,,,,,罗博特科
+300476,SZSE:300476,,,,,,胜宏科技

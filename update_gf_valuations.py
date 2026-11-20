@@ -1091,6 +1091,12 @@ def sheet_term_coverage(ws, mapping, cache, min_weight=0.01):
     return got, need
 
 
+def valuation_row_state(ws, row):
+    """Compare source values and inclusion flags, not dates or rounded summary ratios."""
+    return tuple(ws.cell(row, col).value for col in
+                 (4, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17, 19))
+
+
 def flush_cache_to_sheet(ws, mapping, cache, min_weight=0.01) -> int:
     today = date.today().isoformat()
     wrote = 0
@@ -1103,6 +1109,7 @@ def flush_cache_to_sheet(ws, mapping, cache, min_weight=0.01) -> int:
         ticks = candidates(str(code), mapping)
         used = None
         any_hit = False
+        before = valuation_row_state(ws, r)
         for field, c_cur, c_med, c_inc, slugs in TERM_SPECS:
             hit = None
             for t in ticks:
@@ -1120,7 +1127,7 @@ def flush_cache_to_sheet(ws, mapping, cache, min_weight=0.01) -> int:
             if med is not None:
                 set_blue(ws.cell(r, c_med), med)
             ws.cell(r, c_inc).value = include_flag(cur, med, bool(meta.get(f"no_{field}")), field)
-        if any_hit:
+        if any_hit and valuation_row_state(ws, r) != before:
             bits = [f"GF自动 {today}"]
             for field, c_cur, c_med, _c_inc, slugs in TERM_SPECS:
                 if meta.get(f"no_{field}"):
@@ -1159,13 +1166,27 @@ def maybe_write_ready_sheets(wb, xlsx, targets, mapping, cache, min_weight, dry_
         print("达到 80%：" + "、".join(s for s, _ in ready) + "。干跑，不写。")
         return
     stamp = _now_stamp()
+    # Intermediate batches save data immediately; defer one snapshot until the final call.
+    pending = getattr(wb, "_gf_pending_snapshots", set())
+    wb._gf_pending_snapshots = pending
+    changed = False
     for s, cov in ready:
         n = flush_cache_to_sheet(wb[s], mapping, cache, min_weight)
-        if snapshot:
+        if n:
+            pending.add(s)
+            changed = True
+        if snapshot and s in pending:
             snapshot_as_one_company(wb, wb[s], stamp, source="GF自动", cov_pct=cov)
-            print(f"    已写入 {s} {n} 行，并记历史（覆盖 {cov}%）。")
+            pending.remove(s)
+            changed = True
+            print(f"    {s} 数据有变化，已记历史（覆盖 {cov}%）。")
+        elif n:
+            print(f"    已更新 {s} {n} 行（本批不追加历史，等最后一次）。")
         else:
-            print(f"    已写入 {s} {n} 行（本批不追加历史，等最后一次）。")
+            print(f"    {s} 数据未变化，保留上次写入日期，不重复记历史。")
+    if not changed:
+        print("Excel 无变化，不保存、不重排总览。")
+        return
     refresh_overview_rank(wb)
     wb.save(xlsx)
     print(f"已写回 {xlsx}")
@@ -1483,6 +1504,7 @@ def process_sheet(
         if not any(results.values()):
             print("    四项都没取到，本行不动。")
             continue
+        before = valuation_row_state(ws, r)
         note_bits = [f"GF自动 {today}"]
         if used_ticker and used_ticker.upper() != code.upper():
             note_bits.append(used_ticker)
@@ -1510,6 +1532,9 @@ def process_sheet(
             ws.cell(r, c_inc).value = include_flag(cur, med, forced, field)
             if med is None:
                 note_bits.append(f"{field}无十年中位")
+        if valuation_row_state(ws, r) == before:
+            print("    数据未变化，保留日期和历史。")
+            continue
         set_row_note(ws, r, note_bits, meta.get("note") or "")
         stats["wrote"] += 1
         stats["wrote_sheet"] = stats.get("wrote_sheet", 0) + 1
@@ -2154,6 +2179,7 @@ def main():
         debug=args.debug,
         cdp=args.cdp or None,
     )
+    changed_sheets = set()
     stats = {"fetch": 0, "ok": 0, "miss": 0, "wrote": 0, "skip": 0}
     try:
         if args.cdp and _port_open():
@@ -2181,14 +2207,16 @@ def main():
                 wb=wb,
                 refresh=args.refresh,
             )
+            if stats.get("wrote_sheet", 0):
+                changed_sheets.add(s)
             if client.blocked:
                 print("已被拦截，后面的页一律不跑。")
                 break
         # 一次运行只在最后记历史，80% 和 100% 合成一条
-        if not args.dry_run and not client.blocked:
+        if not args.dry_run and not client.blocked and changed_sheets:
             stamp = _now_stamp()
             for s in targets:
-                if s not in wb.sheetnames:
+                if s not in changed_sheets or s not in wb.sheetnames:
                     continue
                 got, need = sheet_term_coverage(wb[s], mapping, cache, args.min_weight)
                 if need and got / need >= 0.8:
@@ -2228,4 +2256,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

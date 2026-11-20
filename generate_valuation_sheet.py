@@ -12,6 +12,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os
+from copy import copy, deepcopy
 import sys
 import re
 from pathlib import Path
@@ -601,18 +602,159 @@ def _find_summary_start(ws):
 
 
 def _copy_sheet_content(src_ws, dest):
-    for row in src_ws.iter_rows():
+    for row in src_ws:
         for cell in row:
-            dest.cell(cell.row, cell.column, cell.value)
-            if cell.has_style:
-                dest.cell(cell.row, cell.column).font = cell.font.copy()
-                dest.cell(cell.row, cell.column).fill = cell.fill.copy()
-                dest.cell(cell.row, cell.column).alignment = cell.alignment.copy()
-                dest.cell(cell.row, cell.column).number_format = cell.number_format
-    for col_letter, dim in src_ws.column_dimensions.items():
-        dest.column_dimensions[col_letter].width = dim.width
+            target = dest.cell(cell.row, cell.column, cell.value)
+            for attr in ("font", "fill", "border", "alignment", "protection"):
+                setattr(target, attr, copy(getattr(cell, attr)))
+            target.number_format = cell.number_format
+    for key, dim in src_ws.column_dimensions.items():
+        dest.column_dimensions[key] = copy(dim)
+    for key, dim in src_ws.row_dimensions.items():
+        dest.row_dimensions[key] = copy(dim)
+    dest.freeze_panes = src_ws.freeze_panes
     for ch in src_ws._charts:
-        dest.add_chart(ch)
+        dest.add_chart(deepcopy(ch))
+
+
+def _preserve_sheet_format(old, dest):
+    """Carry user formatting by holding code and metric label, never by stale row number."""
+    from openpyxl.worksheet.cell_range import CellRange
+    from openpyxl.formula.translate import Translator
+
+    def holdings(ws):
+        found = {}
+        for r in range(5, ws.max_row + 1):
+            code, weight = ws.cell(r, 2).value, ws.cell(r, 3).value
+            if not code or not isinstance(weight, (int, float)):
+                break
+            found[str(code).strip().upper()] = r
+        return found
+
+    def label(value):
+        if not isinstance(value, str) or value.startswith("="):
+            return None
+        # Labels can include explanatory qualifiers or whitespace in old templates.
+        return re.split(r"[（(]", re.sub(r"\s+", "", value))[0].replace("：", ":")
+
+    old_codes, new_codes = holdings(old), holdings(dest)
+    row_map = {r: r for r in range(1, 5)}
+    for code, nr in new_codes.items():
+        if code in old_codes:
+            row_map[old_codes[code]] = nr
+    old_labels = {}
+    for row in old:
+        for c in (1, 3):
+            key = label(old.cell(row[0].row, c).value)
+            if key:
+                old_labels.setdefault(key, (row[0].row, c))
+    metric_cells = []
+    for row in dest:
+        nr = row[0].row
+        if nr in new_codes.values():
+            continue
+        for c in (1, 3):
+            key = label(dest.cell(nr, c).value)
+            if key in old_labels:
+                oldr, oldc = old_labels[key]
+                metric_cells.append((oldr, oldc, nr, c))
+                if c == oldc == 1:
+                    row_map[oldr] = nr
+    oh = next((r for r in range(1, old.max_row + 1) if old.cell(r, 1).value == "当一家公司历史"), None)
+    nh = next((r for r in range(1, dest.max_row + 1) if dest.cell(r, 1).value == "当一家公司历史"), None)
+    if oh and nh:
+        row_map[oh], row_map[oh + 1] = nh, nh + 1
+    # Total rows have slightly different captions in older workbooks.
+    if old_codes and new_codes:
+        row_map[max(old_codes.values()) + 1] = max(new_codes.values()) + 1
+
+    def copy_row(oldr, newr):
+        for col in range(1, max(old.max_column, dest.max_column) + 1):
+            dest.cell(newr, col)._style = copy(old.cell(oldr, col)._style)
+        if oldr in old.row_dimensions:
+            dim = copy(old.row_dimensions[oldr]); dim.index = newr
+            dest.row_dimensions[newr] = dim
+
+    for oldr, newr in row_map.items():
+        copy_row(oldr, newr)
+    # A newly added holding inherits the closest old holding's presentation.
+    for code, nr in new_codes.items():
+        if code not in old_codes and old_codes:
+            copy_row(min(old_codes.values(), key=lambda r: abs(r - nr)), nr)
+    for oldr, oldc, nr, nc in metric_cells:
+        for offset in (0, 1):
+            dest.cell(nr, nc + offset)._style = copy(old.cell(oldr, oldc + offset)._style)
+    for key, dim in old.column_dimensions.items():
+        dest.column_dimensions[key] = copy(dim)
+    for attr in ("sheet_format", "sheet_properties", "views", "sheet_protection",
+                 "page_setup", "page_margins", "print_options"):
+        if hasattr(old, attr):
+            setattr(dest, attr, deepcopy(getattr(old, attr)))
+    dest.protection = deepcopy(old.protection)
+    dest.freeze_panes = old.freeze_panes
+
+    def mapped_ranges(rng):
+        if old_codes and new_codes and rng.min_row == min(old_codes.values()) and rng.max_row == max(old_codes.values()):
+            return [CellRange(min_col=rng.min_col, max_col=rng.max_col,
+                              min_row=min(new_codes.values()), max_row=max(new_codes.values()))]
+        rows = sorted({row_map[r] for r in range(rng.min_row, rng.max_row + 1) if r in row_map})
+        if not rows:
+            return []
+        groups = [[rows[0]]]
+        for r in rows[1:]:
+            if r == groups[-1][-1] + 1: groups[-1].append(r)
+            else: groups.append([r])
+        return [CellRange(min_col=rng.min_col, max_col=rng.max_col, min_row=g[0], max_row=g[-1]) for g in groups]
+
+    for merged in old.merged_cells.ranges:
+        mapped = mapped_ranges(merged)
+        if len(mapped) == 1 and mapped[0].size == merged.size:
+            # Never merge over newly generated content.
+            cells = list(dest[str(mapped[0])])
+            if all(c.value is None for row in cells for c in row if c.coordinate != dest.cell(mapped[0].min_row, mapped[0].min_col).coordinate):
+                dest.merge_cells(str(mapped[0]))
+    for cf in old.conditional_formatting:
+        for rng in cf.sqref.ranges:
+            for target in mapped_ranges(rng):
+                for rule in old.conditional_formatting[cf]:
+                    cloned = deepcopy(rule)
+                    if cloned.formula:
+                        cloned.formula = [Translator("=" + f.lstrip("="), origin=old.cell(rng.min_row, rng.min_col).coordinate)
+                                          .translate_formula(dest.cell(target.min_row, target.min_col).coordinate)[1:] for f in cloned.formula]
+                    dest.conditional_formatting.add(str(target), cloned)
+    # Keep chart types, colours, fonts and placement; retarget references in this sheet.
+    if old._charts:
+        dest._charts = deepcopy(old._charts)
+        for chart in dest._charts:
+            if oh and nh:
+                if isinstance(chart.anchor, str):
+                    chart.anchor = re.sub(r"(\d+)$", lambda m: str(int(m.group(1)) + nh - oh) if int(m.group(1)) >= oh else m.group(1), chart.anchor)
+                else:
+                    for marker in (getattr(chart.anchor, "_from", None), getattr(chart.anchor, "to", None)):
+                        if marker is not None and marker.row + 1 >= oh:
+                            marker.row += nh - oh
+            for part in chart._charts:
+                for series in part.series:
+                    for attr in ("val", "cat", "xVal", "yVal"):
+                        data = getattr(series, attr, None)
+                        for kind in ("numRef", "strRef"):
+                            ref = getattr(data, kind, None)
+                            if ref is None or not ref.f or "!" not in ref.f:
+                                continue
+                            prefix, address = ref.f.rsplit("!", 1)
+                            if prefix.strip("'").replace("''", "'") != old.title:
+                                continue
+                            full_holding_range = bool(old_codes and re.fullmatch(r"\$?[A-Z]+\$?{}:\$?[A-Z]+\$?{}".format(min(old_codes.values()), max(old_codes.values())), address))
+                            def move(m):
+                                r = int(m.group(2))
+                                nr = row_map.get(r, nh + r - oh if oh and nh and r >= oh else r)
+                                if full_holding_range and new_codes and r == min(old_codes.values()): nr = min(new_codes.values())
+                                # Extend a full holding range when its endpoint grows.
+                                if old_codes and new_codes and r == max(old_codes.values()): nr = max(new_codes.values())
+                                return m.group(1) + str(nr)
+                            ref.f = prefix + "!" + re.sub(r"(\$?[A-Z]+\$?)(\d+)", move, address)
+                            if hasattr(ref, "numCache"): ref.numCache = None
+                            if hasattr(ref, "strCache"): ref.strCache = None
 
 
 def _restore_blues(ws, blues):
@@ -745,6 +887,7 @@ def merge_into_main(input_path, main_path, sheet_names=None):
             del main[out_name]
             dest = main.create_sheet(out_name, sheet_index)
             _copy_sheet_content(tmp_ws, dest)
+            _preserve_sheet_format(old_ws, dest)
 
             _shift_summary_refs(main, out_name, old_summary, info["summary_start"])
             _relink_overview(main, out_name, info["summary_start"])
@@ -928,4 +1071,5 @@ if __name__ == "__main__":
     else:
         # 无参数：进入交互模式
         interactive_run()
+
 

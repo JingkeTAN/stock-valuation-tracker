@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import copy
 import csv
 import json
 import os
@@ -1016,7 +1017,9 @@ def iter_holding_rows(ws):
 
 def set_blue(cell, value):
     cell.value = value
-    cell.font = BLUE
+    font = copy(cell.font)
+    font.color = BLUE.color
+    cell.font = font
 
 
 def include_flag(current, median, forced_off: bool, field: str = "") -> int:
@@ -1642,6 +1645,16 @@ def _parse_cov(source: str | None) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _inherit_history_style(ws, target, columns):
+    if target <= 2 or not hasattr(ws.cell(target - 1, 1).value, "year"):
+        return
+    for col in range(1, columns + 1):
+        if not ws.cell(target, col).has_style:
+            ws.cell(target, col)._style = copy(ws.cell(target - 1, col)._style)
+    if ws.row_dimensions[target].height is None:
+        ws.row_dimensions[target].height = ws.row_dimensions[target - 1].height
+
+
 def append_central_history(wb, sheet_name: str, stamp: datetime, pe, pb, ps, ev, source: str, cov_pct: int | None = None) -> bool:
     """写入总账。返回 True 表示覆盖了上一轮不足 100% 的中间行。"""
     ws = ensure_hist_sheet(wb)
@@ -1658,8 +1671,10 @@ def append_central_history(wb, sheet_name: str, stamp: datetime, pe, pb, ps, ev,
         break
     if target is None:
         target = _next_empty_row(ws, 2, cols=7)
+    _inherit_history_style(ws, target, 7 if ws.title == HIST_SHEET else 5)
     ws.cell(target, 1).value = stamp
-    ws.cell(target, 1).number_format = "yyyy-mm-dd"
+    if ws.cell(target, 1).number_format in ("General", "yyyy-mm-dd h:mm:ss"):
+        ws.cell(target, 1).number_format = "yyyy-mm-dd"
     ws.cell(target, 2).value = sheet_name
     ws.cell(target, 3).value = _fmt_ratio(pe)
     ws.cell(target, 4).value = _fmt_ratio(pb)
@@ -1667,9 +1682,13 @@ def append_central_history(wb, sheet_name: str, stamp: datetime, pe, pb, ps, ev,
     ws.cell(target, 6).value = _fmt_ratio(ev)
     ws.cell(target, 7).value = tag
     for c in range(1, 8):
-        ws.cell(target, c).font = NOTE_FONT
+        if not ws.cell(target, c).has_style:
+            if target > 2 and ws.cell(target - 1, c).has_style:
+                ws.cell(target, c)._style = copy(ws.cell(target - 1, c)._style)
+            else:
+                ws.cell(target, c).font = NOTE_FONT
     for c in (3, 4, 5, 6):
-        if isinstance(ws.cell(target, c).value, (int, float)):
+        if isinstance(ws.cell(target, c).value, (int, float)) and ws.cell(target, c).number_format == "General":
             ws.cell(target, c).number_format = "0.0000"
     return overwritten
 
@@ -1690,7 +1709,8 @@ def snapshot_as_one_company(wb, ws, stamp: datetime, source: str = "GF自动", c
             hist_header = r
     if label_row:
         ws.cell(label_row, 3).value = f"最近写入 {stamp:%Y-%m-%d}"
-        ws.cell(label_row, 3).font = NOTE_FONT
+        if not ws.cell(label_row, 3).has_style:
+            ws.cell(label_row, 3).font = NOTE_FONT
 
     if hist_header is None:
         start = (ws.max_row or 90) + 2
@@ -1719,16 +1739,22 @@ def snapshot_as_one_company(wb, ws, stamp: datetime, source: str = "GF自动", c
             target = _next_empty_row(ws, data_start, cols=5)
     else:
         target = _next_empty_row(ws, data_start, cols=5)
+    _inherit_history_style(ws, target, 7 if ws.title == HIST_SHEET else 5)
     ws.cell(target, 1).value = stamp
-    ws.cell(target, 1).number_format = "yyyy-mm-dd"
+    if ws.cell(target, 1).number_format in ("General", "yyyy-mm-dd h:mm:ss"):
+        ws.cell(target, 1).number_format = "yyyy-mm-dd"
     ws.cell(target, 2).value = _fmt_ratio(pe)
     ws.cell(target, 3).value = _fmt_ratio(pb)
     ws.cell(target, 4).value = _fmt_ratio(ps)
     ws.cell(target, 5).value = _fmt_ratio(ev)
     for c in range(1, 6):
-        ws.cell(target, c).font = NOTE_FONT
+        if not ws.cell(target, c).has_style:
+            if target > 2 and ws.cell(target - 1, c).has_style:
+                ws.cell(target, c)._style = copy(ws.cell(target - 1, c)._style)
+            else:
+                ws.cell(target, c).font = NOTE_FONT
     for c in (2, 3, 4, 5):
-        if isinstance(ws.cell(target, c).value, (int, float)):
+        if isinstance(ws.cell(target, c).value, (int, float)) and ws.cell(target, c).number_format == "General":
             ws.cell(target, c).number_format = "0.0000"
     print(
         f"    当一家公司快照 {stamp:%Y-%m-%d}  PE={_fmt_ratio(pe)} PB={_fmt_ratio(pb)} "
@@ -1755,7 +1781,7 @@ def _overview_sheet_of_row(ws, r: int) -> str | None:
 
 
 def refresh_overview_rank(wb) -> None:
-    """总览对比底部表按四维平均重排，并重建图表（避免 openpyxl 存盘后坐标轴消失）。"""
+    """总览底部按四维平均重排，样式随行移动；保留原图表，仅更新数据引用。"""
     if "总览对比" not in wb.sheetnames:
         return
     ws = wb["总览对比"]
@@ -1778,12 +1804,17 @@ def refresh_overview_rank(wb) -> None:
         vals = [x for x in (pe, pb, ps, ev) if isinstance(x, (int, float))]
         avg = sum(vals) / len(vals) if vals else None
         cells = [ws.cell(r, c).value for c in range(1, 9)]
-        block.append((avg if avg is not None else 9999, cells, pe, pb, ps, ev))
+        styles = [copy(ws.cell(r, c)._style) for c in range(1, 9)]
+        height = ws.row_dimensions[r].height
+        block.append((avg if avg is not None else 9999, cells, pe, pb, ps, ev, styles, height))
     block.sort(key=lambda x: x[0])
     names = []
     series_vals = [[], [], [], []]
-    for i, (_avg, cells, pe, pb, ps, ev) in enumerate(block):
+    for i, (_avg, cells, pe, pb, ps, ev, styles, height) in enumerate(block):
         rr = 54 + i
+        ws.row_dimensions[rr].height = height
+        for c, style in enumerate(styles, 1):
+            ws.cell(rr, c)._style = copy(style)
         for c, v in enumerate(cells, 1):
             if c in (6, 7, 8):
                 continue
@@ -1792,12 +1823,34 @@ def refresh_overview_rank(wb) -> None:
         ws.cell(rr, 7).value = 1.5
         ws.cell(rr, 8).value = f'=IF(COUNT(B{rr}:E{rr})=0,"",AVERAGE(B{rr}:E{rr}))'
         for c in (2, 3, 4, 5, 8):
-            ws.cell(rr, c).number_format = "0.00"
+            if ws.cell(rr, c).number_format == "General":
+                ws.cell(rr, c).number_format = "0.00"
         names.append(cells[0])
         for bucket, val in zip(series_vals, (pe, pb, ps, ev)):
             bucket.append(val if isinstance(val, (int, float)) else None)
     last = 53 + len(block)
-    ws._charts = []
+    if ws._charts:
+        # Preserve all chart presentation; update only series bound to the ranking block.
+        for chart in ws._charts:
+            for part in chart._charts:
+                for series in part.series:
+                    for attr in ("cat", "val"):
+                        data = getattr(series, attr, None)
+                        for kind in ("numRef", "strRef"):
+                            ref = getattr(data, kind, None)
+                            if ref is None or not ref.f or "!" not in ref.f:
+                                continue
+                            prefix, address = ref.f.rsplit("!", 1)
+                            if prefix.strip("'").replace("''", "'") != ws.title:
+                                continue
+                            match = re.fullmatch(r"(\$?[A-H]\$?54:)(\$?[A-H]\$?)\d+", address)
+                            if not match:
+                                continue
+                            ref.f = prefix + "!" + match.group(1) + match.group(2) + str(last)
+                            if hasattr(ref, "numCache"): ref.numCache = None
+                            if hasattr(ref, "strCache"): ref.strCache = None
+        print(f"    总览对比已重排 {len(block)} 行，保留原图表样式。")
+        return
     cat_ref = f"'{ws.title}'!$A$54:$A${last}"
     cats = Reference(ws, min_col=1, min_row=54, max_row=last)
     n = len(names)
@@ -1957,7 +2010,8 @@ def set_row_note(ws, r, bits: list[str], extra: str = "") -> None:
     if keep:
         text = text + "｜" + keep[:40]
     ws.cell(r, 20).value = text
-    ws.cell(r, 20).font = NOTE_FONT
+    if not ws.cell(r, 20).has_style:
+        ws.cell(r, 20).font = NOTE_FONT
 
 
 def sheet_last_update(ws) -> str:
@@ -2256,5 +2310,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

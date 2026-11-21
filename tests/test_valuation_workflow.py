@@ -45,7 +45,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(result['测试页']['D5'].value, 20)
             self.assertEqual(result['测试页']['A150'].value, '当一家公司历史')
             self.assertEqual(result['当一家公司历史']['A5'].value, '旧快照')
-            self.assertEqual(result.sheetnames, wb.sheetnames)
+            self.assertEqual(result.sheetnames, wb.sheetnames + ["基金参数"])
 
     def test_legacy_vietnam_layout_and_repeated_updates(self):
         with tempfile.TemporaryDirectory() as d:
@@ -106,3 +106,4 @@ class WorkflowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

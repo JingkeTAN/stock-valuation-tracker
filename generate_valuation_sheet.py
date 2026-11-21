@@ -5,9 +5,10 @@
 输出：同名多 sheet 的完整计算表 + 总览对比 + 网页更新来源 + 口径说明 + 当一家公司历史总账
 合并模式：更新=只重生计算页（同步汇总引用）；添加=新建页+总览追加列
 进标志优先读取 gf_ticker_map.csv
-兼容 Python 3.6+
+运行环境：Python 3.10+
 """
 
+from valuation_costs import COST_SHEET, ensure_cost_parameters
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -422,6 +423,9 @@ def generate_overview(wb, sheet_infos):
         ws.cell(row, 6, 1)
         ws.cell(row, 7, 1.5)
 
+    ws.cell(chart_start - 1, 8, "四维平均")
+    ws.cell(chart_start + len(sheet_infos), 1, "横坐标已按四维平均排序")
+
     # 不在这里画图；跑 update_gf_valuations.py 时会调用 refresh_overview_rank 重建图表
 
     # 列宽
@@ -519,6 +523,8 @@ def generate_from_input(input_path, output_path):
 
     sheet_infos = []
     for sheet_name in src.sheetnames:
+        if sheet_name == COST_SHEET:
+            continue
         src_ws = src[sheet_name]
         holdings = read_holdings(src_ws)
         if not holdings:
@@ -540,6 +546,9 @@ def generate_from_input(input_path, output_path):
     generate_master_history(out_wb, sheet_infos)
     print("已生成: 总览对比 + 网页更新来源 + 口径说明 + 当一家公司历史")
 
+    ensure_cost_parameters(out_wb, [name for name, _ in sheet_infos])
+    from update_gf_valuations import refresh_overview_rank
+    refresh_overview_rank(out_wb)
     out_wb.save(output_path)
     print("\n完成。输出文件:", output_path)
     print("共生成", len(sheet_infos), "个计算页 + 4 个辅助页。")
@@ -860,6 +869,8 @@ def merge_into_main(input_path, main_path, sheet_names=None):
     added = 0
 
     for sheet_name in src.sheetnames:
+        if sheet_name == COST_SHEET:
+            continue
         if sheet_names and sheet_name not in sheet_names:
             continue
         src_ws = src[sheet_name]
@@ -991,6 +1002,9 @@ def merge_into_main(input_path, main_path, sheet_names=None):
                 src_sheet.cell(row, 3, url)
                 print("已追加来源:", code)
 
+    ensure_cost_parameters(main, [])
+    from update_gf_valuations import refresh_overview_rank
+    refresh_overview_rank(main)
     main.save(main_path)
     print("\n完成。更新 {} 页，添加 {} 页。主文件: {}".format(updated, added, main_path))
     return True
@@ -1071,5 +1085,6 @@ if __name__ == "__main__":
     else:
         # 无参数：进入交互模式
         interactive_run()
+
 
 

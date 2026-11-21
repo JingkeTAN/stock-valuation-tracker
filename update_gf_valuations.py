@@ -36,6 +36,8 @@ import sys
 import time
 from datetime import date, datetime
 from pathlib import Path
+from valuation_costs import (COST_SHEET, cost_factor, ensure_cost_parameters,
+                             write_cost_columns, write_cost_headers)
 
 from openpyxl import load_workbook
 from openpyxl.chart import AreaChart, BarChart, LineChart, Reference
@@ -248,7 +250,7 @@ def open_one_in_connected_window(client, url: str) -> bool:
             print(f"    从当前页打开失败，改用调试口：{e}")
     return cdp_open_tab(url)
 
-SKIP_SHEETS = {"总览对比", "银行股息对照", "口径说明", "当一家公司历史", "网页更新来源"}
+SKIP_SHEETS = {COST_SHEET, "总览对比", "银行股息对照", "口径说明", "当一家公司历史", "网页更新来源"}
 HIST_SHEET = "当一家公司历史"
 HIST_COLS = [
     "时间",
@@ -1780,6 +1782,48 @@ def _overview_sheet_of_row(ws, r: int) -> str | None:
     return src.split("!")[0].lstrip("=").strip("'")
 
 
+def repair_ranking_sources(wb):
+    """Align the four displayed as-one ratios with the active holdings used for sorting."""
+    ws = wb['总览对比']
+    for col in range(2, ws.max_column + 1):
+        source = ws.cell(45, col).value
+        if not isinstance(source, str) or '!' not in source:
+            continue
+        name = source.split('!')[0].lstrip('=').strip("'").replace("''", "'")
+        if name not in wb.sheetnames:
+            continue
+        target = wb[name]
+        rows = [r for r, _, _, w in iter_holding_rows(target) if w is not None and w > 0]
+        if not rows:
+            continue
+        start, end = min(rows), max(rows)
+        # Older manual row edits left copied helper references and missing last-row helpers.
+        for r in rows:
+            for current, median, flag, helper in [('D','E','G',35), ('H','I','K',37),
+                                                   ('L','M','O',39), ('P','Q','S',41)]:
+                condition = (f'AND({flag}{r}=1,ISNUMBER({current}{r}),'
+                             f'{current}{r}{"<>" if current == "P" else ">"}0,'
+                             f'ISNUMBER({median}{r}),{median}{r}>0)')
+                target.cell(r, helper, f'=IF({condition},1/{current}{r},0)')
+                target.cell(r, helper + 1, f'=IF({condition},1/{median}{r},0)')
+        labels = ['组合PE / 常态PE', '组合PB / 常态PB', '组合PS / 常态PS', '组合EVFCF / 常态EVFCF']
+        for offset, (label, cur, med) in enumerate(zip(labels, ['AI','AK','AM','AO'], ['AJ','AL','AN','AP'])):
+            found = [r for r in range(1, target.max_row + 1)
+                     if label.replace(' ', '') in str(target.cell(r, 1).value).replace(' ', '')]
+            if len(found) != 1:
+                continue
+            row = found[0]
+            den = f'SUMPRODUCT(C{start}:C{end},{cur}{start}:{cur}{end})'
+            num = f'SUMPRODUCT(C{start}:C{end},{med}{start}:{med}{end})'
+            if offset == 3:
+                formula = f'=IF(OR({den}<=0,{num}=0),"整包FCF≤0",{num}/{den})'
+            else:
+                formula = f'=IF(OR({den}=0,{num}=0),"",{num}/{den})'
+            target.cell(row, 2, formula)
+            quoted = "'" + name.replace("'", "''") + "'"
+            ws.cell(45 + offset, col, f'={quoted}!B{row}')
+
+
 def refresh_overview_rank(wb) -> None:
     """总览底部按四维平均重排，样式随行移动；保留原图表，仅更新数据引用。"""
     if "总览对比" not in wb.sheetnames:
@@ -1787,11 +1831,17 @@ def refresh_overview_rank(wb) -> None:
     ws = wb["总览对比"]
     # 动态找说明行，扫描到说明行之前（不再写死 73）
     note_row = 73
-    for r in range(54, 100):
+    for r in range(54, ws.max_row + 2):
         v = ws.cell(r, 1).value
         if v and "横坐标已按四维平均" in str(v):
             note_row = r
             break
+    use_costs = COST_SHEET in wb.sheetnames
+    if use_costs:
+        repair_ranking_sources(wb)
+        names_to_add = [_overview_sheet_of_row(ws, r) for r in range(54, note_row)]
+        ensure_cost_parameters(wb, [s for s in names_to_add if s])
+        write_cost_headers(ws, note_row)
     block = []
     for r in range(54, note_row):
         name = ws.cell(r, 1).value
@@ -1803,11 +1853,15 @@ def refresh_overview_rank(wb) -> None:
             pe, pb, ps, ev = compute_as_one_pack(wb[sheet])
         vals = [x for x in (pe, pb, ps, ev) if isinstance(x, (int, float))]
         avg = sum(vals) / len(vals) if vals else None
-        cells = [ws.cell(r, c).value for c in range(1, 9)]
-        styles = [copy(ws.cell(r, c)._style) for c in range(1, 9)]
+        factor = cost_factor(wb, sheet) if use_costs else 1
+        score = avg * factor if avg is not None and factor is not None else float("inf")
+        cells = [ws.cell(r, c).value for c in range(1, 11 if use_costs else 9)]
+        styles = [copy(ws.cell(r, c)._style) for c in range(1, 11 if use_costs else 9)]
         height = ws.row_dimensions[r].height
-        block.append((avg if avg is not None else 9999, cells, pe, pb, ps, ev, styles, height))
+        block.append((score, cells, pe, pb, ps, ev, styles, height))
     block.sort(key=lambda x: x[0])
+    if not block:
+        return
     names = []
     series_vals = [[], [], [], []]
     for i, (_avg, cells, pe, pb, ps, ev, styles, height) in enumerate(block):
@@ -1825,6 +1879,8 @@ def refresh_overview_rank(wb) -> None:
         for c in (2, 3, 4, 5, 8):
             if ws.cell(rr, c).number_format == "General":
                 ws.cell(rr, c).number_format = "0.00"
+        if use_costs:
+            write_cost_columns(wb, ws, rr, _overview_sheet_of_row(ws, rr) or "")
         names.append(cells[0])
         for bucket, val in zip(series_vals, (pe, pb, ps, ev)):
             bucket.append(val if isinstance(val, (int, float)) else None)
@@ -2081,6 +2137,7 @@ def main():
         action="store_true",
         help="不抓 GuruFocus，只按当前蓝字追加一行「当一家公司」历史",
     )
+    ap.add_argument("--rank-only", action="store_true", help="只刷新成本评分及总览排序，不抓数据、不写历史")
     ap.add_argument("--min-weight", type=float, default=0.01, help="默认只抓权重>=1%%")
     ap.add_argument("--limit", type=int, default=0, help="每页最多抓几只，0=不限")
     ap.add_argument("--dry-run", action="store_true", help="只打印不写回")
@@ -2127,6 +2184,15 @@ def main():
                 break
     if not xlsx.exists():
         sys.exit(f"找不到文件: {xlsx}。请把表格放到脚本同一文件夹，或加 --file 路径")
+
+    if args.rank_only:
+        wb = load_workbook(xlsx)
+        ensure_cost_parameters(wb, [])
+        refresh_overview_rank(wb)
+        if not args.dry_run:
+            wb.save(xlsx)
+            print(f"已刷新成本评分和排序：{xlsx}（未写历史）")
+        return
 
     mapping = load_map(MAP_CSV)
     cache = {}
@@ -2310,6 +2376,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

@@ -520,3 +520,22 @@ MA,MA,,,,,,Mastercard
 300450,SZSE:300450,,,,,,先导智能
 300757,SZSE:300757,,,,,,罗博特科
 300476,SZSE:300476,,,,,,胜宏科技
+
+# ===== 513080 CAC 40 法国；赛诺菲请用 SAN.PA，SAN 保留给桑坦德 =====,,,,,,,
+TTE,XPAR:TTE,,,,,,道达尔能源
+SU,XPAR:SU,,,,,,施耐德电气
+AIR,XPAR:AIR,,,,,,空客
+BNP,XPAR:BNP,,,1,1,,法国巴黎银行；不进PS/EV
+CS,XPAR:CS,,,1,1,,安盛保险；沿用金融口径不进PS/EV
+DG,XPAR:DG,,,,,,万喜集团
+EL,XPAR:EL,,,,,,依视路陆逊梯卡
+BN,XPAR:BN,,,,,,达能
+LR,XPAR:LR,,,,,,罗格朗
+SGO,XPAR:SGO,,,,,,圣戈班
+ORA,XPAR:ORA,,,,,,Orange电信
+PUB,XPAR:PUB,,,,,,阳狮集团
+MT,XAMS:MT,,,,,,安赛乐米塔尔；GF采用阿姆斯特丹普通股
+ML,XPAR:ML,,,,,,米其林
+HO,XPAR:HO,,,,,,泰雷兹
+VIE,XPAR:VIE,,,,,,威立雅环境
+CAP,XPAR:CAP,,,,,,凯捷咨询

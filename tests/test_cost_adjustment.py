@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import openpyxl
+from openpyxl.chart import BarChart, Reference
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import generate_valuation_sheet as gen
 import update_gf_valuations as upd
@@ -77,6 +78,41 @@ class CostTests(unittest.TestCase):
 
     def test_cost_sheet_excluded_from_updates(self):
         self.assertIn('基金参数',upd.SKIP_SHEETS)
+
+    def test_existing_chart_uses_adjusted_dimensions_and_stays_bound(self):
+        w=self.book();s=w['总览对比']
+        chart=BarChart();chart.title='原四维图';chart.style=12
+        chart.add_data(Reference(s,min_col=2,max_col=5,min_row=53,max_row=55),titles_from_data=True)
+        chart.set_categories(Reference(s,min_col=1,min_row=54,max_row=55))
+        s.add_chart(chart,'A75')
+        with patch.object(upd,'compute_as_one_pack',return_value=(1,1,1,1)):
+            for _ in range(2):upd.refresh_overview_rank(w)
+        self.assertIs(s._charts[0],chart)
+        self.assertEqual(chart.style,12)
+        self.assertEqual(chart.anchor,'A75')
+        self.assertEqual([x.val.numRef.f for x in chart.series],
+                         [f"'总览对比'!${col}$54:${col}$55" for col in 'KLMN'])
+        self.assertIn('B54*(1+I54/',s['K54'].value)
+        self.assertIn('E54*(1+I54/',s['N54'].value)
+        self.assertIsNone(chart.y_axis.scaling.max)
+
+    def test_new_chart_uses_adjusted_cache_and_preserves_missing_dimensions(self):
+        w=self.book();s=w['总览对比']
+        with patch.object(upd,'compute_as_one_pack',return_value=(1,1,1,None)):
+            upd.refresh_overview_rank(w)
+        bars=s._charts[0]._charts[1].series
+        self.assertIn('$K$54',bars[0].val.numRef.f)
+        self.assertEqual(len(s._charts),2)
+        self.assertIn('$B$54',s._charts[1]._charts[1].series[0].val.numRef.f)
+        self.assertIn('ISNUMBER(E54)',s['N54'].value)
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'two.xlsx';w.save(path)
+            again=openpyxl.load_workbook(path)
+            with patch.object(upd,'compute_as_one_pack',return_value=(1,1,1,None)):
+                upd.refresh_overview_rank(again)
+                upd.refresh_overview_rank(again)
+            self.assertEqual(len(again['总览对比']._charts),2)
+            self.assertIn('$B$54',again['总览对比']._charts[1]._charts[1].series[0].val.numRef.f)
 
     def test_repair_stale_helper_and_overview_references(self):
         w=openpyxl.Workbook();s=w.active;s.title='测试'

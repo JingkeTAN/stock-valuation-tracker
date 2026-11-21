@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import argparse
-from copy import copy
+from copy import copy, deepcopy
 import csv
 import json
 import os
@@ -1824,6 +1824,65 @@ def repair_ranking_sources(wb):
             ws.cell(45 + offset, col, f'={quoted}!B{row}')
 
 
+def _overview_chart_title(chart):
+    rich = getattr(getattr(chart.title, 'tx', None), 'rich', None)
+    return ''.join(run.t or '' for p in rich.p for run in p.r) if rich else ''
+
+
+def _refresh_overview_charts(ws, last, use_costs):
+    """Retain one adjusted chart and one raw chart, with a shared fund order."""
+    def ranking_chart(chart):
+        return any(series.val and series.val.numRef and
+                   re.search(r'\$?[B-EK-N]\$?54:', series.val.numRef.f or '')
+                   for part in chart._charts for series in part.series)
+    charts = [chart for chart in ws._charts if ranking_chart(chart)]
+    if use_costs and charts and not any('原始估值' in _overview_chart_title(c) for c in charts):
+        raw = deepcopy(charts[0])
+        raw.title = '当一家公司：原始估值（未计成本）'
+        anchor = deepcopy(charts[0].anchor)
+        if isinstance(anchor, str):
+            m = re.fullmatch(r'([A-Z]+)([0-9]+)', anchor)
+            anchor = f'{m[1]}{int(m[2]) + 35}' if m else 'A110'
+        else:
+            anchor._from.row += 35
+            if hasattr(anchor, 'to'): anchor.to.row += 35
+        ws.add_chart(raw, anchor)
+    for chart in ws._charts:
+        is_raw = "原始估值" in _overview_chart_title(chart)
+        for part in chart._charts:
+            for series in part.series:
+                for attr in ("cat", "val"):
+                    data = getattr(series, attr, None)
+                    for kind in ("numRef", "strRef"):
+                        ref = getattr(data, kind, None)
+                        if ref is None or not ref.f or "!" not in ref.f:
+                            continue
+                        prefix, address = ref.f.rsplit("!", 1)
+                        if prefix.strip("'").replace("''", "'") != ws.title:
+                            continue
+                        match = re.fullmatch(r"\$?([A-N])\$?54:\$?([A-N])\$?\d+", address)
+                        if not match:
+                            continue
+                        col = match.group(1)
+                        if col != match.group(2):
+                            continue
+                        if use_costs and attr == 'val' and col in 'BCDEKLMN':
+                            col = (dict(zip('KLMN', 'BCDE')) if is_raw else dict(zip('BCDE', 'KLMN'))).get(col, col)
+                            series.title = SeriesLabel(v=(dict(zip('BCDE', ['PE/常态','PB/常态','PS/常态','EV/常态']))[col] if is_raw else ws[f'{col}53'].value))
+                            part.y_axis.scaling.max = None
+                            chart.y_axis.scaling.max = None
+                            # Preserve the existing title's font and paragraph formatting.
+                            title = getattr(getattr(chart.title, 'tx', None), 'rich', None)
+                            runs = [run for paragraph in title.p for run in paragraph.r] if title else []
+                            if runs:
+                                runs[0].t = '当一家公司：原始估值（未计成本）' if is_raw else '当一家公司：成本调整后四维评分'
+                                for paragraph in title.p:
+                                    paragraph.r = [run for run in paragraph.r if run is runs[0]]
+                        ref.f = f'{prefix}!${col}$54:${col}${last}' 
+                        if hasattr(ref, "numCache"): ref.numCache = None
+                        if hasattr(ref, "strCache"): ref.strCache = None
+
+
 def refresh_overview_rank(wb) -> None:
     """总览底部按四维平均重排，样式随行移动；保留原图表，仅更新数据引用。"""
     if "总览对比" not in wb.sheetnames:
@@ -1855,8 +1914,8 @@ def refresh_overview_rank(wb) -> None:
         avg = sum(vals) / len(vals) if vals else None
         factor = cost_factor(wb, sheet) if use_costs else 1
         score = avg * factor if avg is not None and factor is not None else float("inf")
-        cells = [ws.cell(r, c).value for c in range(1, 11 if use_costs else 9)]
-        styles = [copy(ws.cell(r, c)._style) for c in range(1, 11 if use_costs else 9)]
+        cells = [ws.cell(r, c).value for c in range(1, 15 if use_costs else 9)]
+        styles = [copy(ws.cell(r, c)._style) for c in range(1, 15 if use_costs else 9)]
         height = ws.row_dimensions[r].height
         block.append((score, cells, pe, pb, ps, ev, styles, height))
     block.sort(key=lambda x: x[0])
@@ -1882,29 +1941,12 @@ def refresh_overview_rank(wb) -> None:
         if use_costs:
             write_cost_columns(wb, ws, rr, _overview_sheet_of_row(ws, rr) or "")
         names.append(cells[0])
+        chart_factor = cost_factor(wb, _overview_sheet_of_row(ws, rr)) if use_costs else 1
         for bucket, val in zip(series_vals, (pe, pb, ps, ev)):
-            bucket.append(val if isinstance(val, (int, float)) else None)
+            bucket.append(val * chart_factor if isinstance(val, (int, float)) and chart_factor is not None else None)
     last = 53 + len(block)
     if ws._charts:
-        # Preserve all chart presentation; update only series bound to the ranking block.
-        for chart in ws._charts:
-            for part in chart._charts:
-                for series in part.series:
-                    for attr in ("cat", "val"):
-                        data = getattr(series, attr, None)
-                        for kind in ("numRef", "strRef"):
-                            ref = getattr(data, kind, None)
-                            if ref is None or not ref.f or "!" not in ref.f:
-                                continue
-                            prefix, address = ref.f.rsplit("!", 1)
-                            if prefix.strip("'").replace("''", "'") != ws.title:
-                                continue
-                            match = re.fullmatch(r"(\$?[A-H]\$?54:)(\$?[A-H]\$?)\d+", address)
-                            if not match:
-                                continue
-                            ref.f = prefix + "!" + match.group(1) + match.group(2) + str(last)
-                            if hasattr(ref, "numCache"): ref.numCache = None
-                            if hasattr(ref, "strCache"): ref.strCache = None
+        _refresh_overview_charts(ws, last, use_costs)
         print(f"    总览对比已重排 {len(block)} 行，保留原图表样式。")
         return
     cat_ref = f"'{ws.title}'!$A$54:$A${last}"
@@ -1924,11 +1966,11 @@ def refresh_overview_rank(wb) -> None:
     # 底色：0–1 浅绿，1–2.5 淡粉（F=1 与 G=1.5 堆叠）
     area = AreaChart()
     area.grouping = "stacked"
-    area.title = "当一家公司：相对十年中位（<1 便宜）"
+    area.title = "当一家公司：成本调整后四维评分" if use_costs else "当一家公司：相对十年中位（<1 便宜）"
     area.y_axis.delete = False
     area.x_axis.delete = False
     area.y_axis.scaling.min = 0
-    area.y_axis.scaling.max = 2.5
+    area.y_axis.scaling.max = None if use_costs else 2.5
     bands = Reference(ws, min_col=6, min_row=53, max_col=7, max_row=last)
     area.add_data(bands, titles_from_data=True)
     area.set_categories(cats)
@@ -1949,17 +1991,18 @@ def refresh_overview_rank(wb) -> None:
     bar.type = "col"
     bar.grouping = "clustered"
     bar.y_axis.axId = 200
-    data = Reference(ws, min_col=2, min_row=53, max_col=5, max_row=last)
+    data = Reference(ws, min_col=11 if use_costs else 2, min_row=53, max_col=14 if use_costs else 5, max_row=last)
     bar.add_data(data, titles_from_data=True)
     bar.set_categories(cats)
-    titles = ["PE/常态", "PB/常态", "PS/常态", "EV/常态"]
+    titles = (["成本调整PE", "成本调整PB", "成本调整PS", "成本调整EV"] if use_costs
+              else ["PE/常态", "PB/常态", "PS/常态", "EV/常态"])
     for idx, s in enumerate(bar.series):
         s.cat = AxDataSource(strRef=StrRef(cat_ref))
         s.title = SeriesLabel(v=titles[idx])
         s.graphicalProperties = None
         pts = [NumVal(idx=i, v=v) for i, v in enumerate(series_vals[idx]) if isinstance(v, (int, float))]
         if s.val and s.val.numRef:
-            s.val.numRef.numCache = NumData(ptCount=len(pts), pt=pts)
+            s.val.numRef.numCache = NumData(ptCount=n, pt=pts)
     bar.overlap = -10
 
     # 1 和 1.5 虚线
@@ -1987,6 +2030,8 @@ def refresh_overview_rank(wb) -> None:
     area.width = 28
     area.height = 12
     ws.add_chart(area, "A75")
+    if use_costs:
+        _refresh_overview_charts(ws, last, use_costs)
     print(f"    总览对比已按四维平均重排 {len(block)} 行，四维柱状图已重建。")
 
 

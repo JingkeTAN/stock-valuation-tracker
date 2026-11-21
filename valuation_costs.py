@@ -71,15 +71,26 @@ def write_cost_columns(wb, ws, row, name):
             cell._style = copy(ws.cell(row, 8)._style)
         cell.value = formula
         cell.number_format = '0.0000%' if col == 9 else '0.0000'
+    expected = f"'{COST_SHEET}'!$B$2"
+    for col, raw in zip(range(11, 15), 'BCDE'):
+        cell = ws.cell(row, col)
+        if not cell.has_style:
+            cell._style = copy(ws.cell(row, 8)._style)
+        cell.value = (f'=IFERROR(IF(AND(ISNUMBER({raw}{row}),ISNUMBER(I{row}),'
+                      f'ISNUMBER({expected}),{expected}>0),'
+                      f'{raw}{row}*(1+I{row}/{expected}),""),"")')
+        cell.number_format = '0.0000'
 
 
 def write_cost_headers(ws, note_row):
-    for col, title in ((9, '年化成本率'), (10, '成本调整评分')):
+    for col, title in ((9, '年化成本率'), (10, '成本调整评分'),
+                       (11, '成本调整PE'), (12, '成本调整PB'),
+                       (13, '成本调整PS'), (14, '成本调整EV')):
         cell = ws.cell(53, col)
         if not cell.has_style:
             cell._style = copy(ws.cell(53, 8)._style)
         cell.value = title
         if ws.column_dimensions[cell.column_letter].width < 19:
             ws.column_dimensions[cell.column_letter].width = 19
-    ws['A52'] = '估值对比（按成本调整评分从低到高；四维及图表保留原始估值）'
-    ws.cell(note_row, 1, '横坐标已按四维平均的成本调整评分排序；图表仍为原始估值。成本参数在「基金参数」页修改；手改参数后运行 --rank-only 刷新顺序。')
+    ws['A52'] = '估值对比（按成本调整评分从低到高；上图为成本调整四维，下图为原始估值）'
+    ws.cell(note_row, 1, '横坐标已按四维平均的成本调整评分排序；上图已乘成本系数，下图为原始估值；两图基金顺序相同。B:E为原始估值，K:N为调整评分；参数修改后运行 --rank-only 刷新顺序。')

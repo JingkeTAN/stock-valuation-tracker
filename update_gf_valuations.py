@@ -44,7 +44,7 @@ from openpyxl.chart import AreaChart, BarChart, LineChart, Reference
 from openpyxl.chart.marker import Marker
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.drawing.line import LineProperties
-from openpyxl.chart.data_source import AxDataSource, NumData, NumRef, NumVal, StrRef
+from openpyxl.chart.data_source import AxDataSource, NumData, NumRef, NumVal, StrData, StrRef, StrVal
 from openpyxl.chart.series import SeriesLabel
 from openpyxl.styles import Font
 from openpyxl.utils import column_index_from_string
@@ -1849,7 +1849,11 @@ def _refresh_overview_charts(ws, last, use_costs):
         ws.add_chart(raw, anchor)
     for chart in ws._charts:
         is_raw = "原始估值" in _overview_chart_title(chart)
+        is_ranking = ranking_chart(chart)
         for part in chart._charts:
+            if is_ranking:
+                part.x_axis.delete = False
+                part.x_axis.tickLblPos = "low"
             for series in part.series:
                 for attr in ("cat", "val"):
                     data = getattr(series, attr, None)
@@ -1880,7 +1884,13 @@ def _refresh_overview_charts(ws, last, use_costs):
                                     paragraph.r = [run for run in paragraph.r if run is runs[0]]
                         ref.f = f'{prefix}!${col}$54:${col}${last}' 
                         if hasattr(ref, "numCache"): ref.numCache = None
-                        if hasattr(ref, "strCache"): ref.strCache = None
+                        if attr == "cat" and col == "A" and is_ranking:
+                            labels = [StrVal(idx=r - 54, v=str(ws.cell(r, 1).value))
+                                      for r in range(54, last + 1) if ws.cell(r, 1).value is not None]
+                            series.cat = AxDataSource(strRef=StrRef(
+                                f=ref.f, strCache=StrData(ptCount=last - 53, pt=labels)))
+                        elif hasattr(ref, "strCache"):
+                            ref.strCache = None
 
 
 def refresh_overview_rank(wb) -> None:
